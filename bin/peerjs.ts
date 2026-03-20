@@ -94,8 +94,13 @@ if (!opts.port) {
 	opts.port = parseInt(process.env["PORT"]!);
 }
 if (opts.cors) {
+	// Handle '*' for all origins, otherwise use the array of origins
+	const origin = opts.cors.length === 1 && opts.cors[0] === '*' 
+		? '*' 
+		: opts.cors;
+	
 	opts["corsOptions"] = {
-		origin: opts.cors,
+		origin: origin,
 	} satisfies CorsOptions;
 }
 process.on("uncaughtException", function (e) {

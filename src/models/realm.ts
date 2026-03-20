@@ -22,11 +22,16 @@ export interface IRealm {
 	clearMessageQueue(id: string): void;
 
 	generateClientId(generateClientId?: () => string): string;
+
+	getClientsByIp(ipAddress: string): Map<string, IClient> | undefined;
+
+	getAllIpGroups(): Map<string, Map<string, IClient>>;
 }
 
 export class Realm implements IRealm {
 	private readonly clients = new Map<string, IClient>();
 	private readonly messageQueues = new Map<string, IMessageQueue>();
+	private readonly clientsByIp = new Map<string, Map<string, IClient>>();
 
 	public getClientsIds(): string[] {
 		return [...this.clients.keys()];
@@ -42,12 +47,33 @@ export class Realm implements IRealm {
 
 	public setClient(client: IClient, id: string): void {
 		this.clients.set(id, client);
+
+		// Add to IP-based grouping
+		const ip = client.getIpAddress();
+		if (ip) {
+			if (!this.clientsByIp.has(ip)) {
+				this.clientsByIp.set(ip, new Map());
+			}
+			this.clientsByIp.get(ip)!.set(id, client);
+		}
 	}
 
 	public removeClientById(id: string): boolean {
 		const client = this.getClientById(id);
 
 		if (!client) return false;
+
+		// Remove from IP-based grouping
+		const ip = client.getIpAddress();
+		if (ip) {
+			const ipGroup = this.clientsByIp.get(ip);
+			if (ipGroup) {
+				ipGroup.delete(id);
+				if (ipGroup.size === 0) {
+					this.clientsByIp.delete(ip);
+				}
+			}
+		}
 
 		this.clients.delete(id);
 
@@ -80,5 +106,13 @@ export class Realm implements IRealm {
 		}
 
 		return clientId;
+	}
+
+	public getClientsByIp(ipAddress: string): Map<string, IClient> | undefined {
+		return this.clientsByIp.get(ipAddress);
+	}
+
+	public getAllIpGroups(): Map<string, Map<string, IClient>> {
+		return this.clientsByIp;
 	}
 }

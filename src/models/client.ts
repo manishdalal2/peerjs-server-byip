@@ -13,6 +13,14 @@ export interface IClient {
 
 	setLastPing(lastPing: number): void;
 
+	getIpAddress(): string;
+
+	setIpAddress(ip: string): void;
+
+	getAlias(): string;
+
+	setAlias(alias: string): void;
+
 	send<T>(data: T): void;
 }
 
@@ -21,6 +29,8 @@ export class Client implements IClient {
 	private readonly token: string;
 	private socket: WebSocket | null = null;
 	private lastPing: number = new Date().getTime();
+	private ipAddress: string = "";
+	private alias: string = "";
 
 	constructor({ id, token }: { id: string; token: string }) {
 		this.id = id;
@@ -49,6 +59,22 @@ export class Client implements IClient {
 
 	public setLastPing(lastPing: number): void {
 		this.lastPing = lastPing;
+	}
+
+	public getIpAddress(): string {
+		return this.ipAddress;
+	}
+
+	public setIpAddress(ip: string): void {
+		this.ipAddress = ip;
+	}
+
+	public getAlias(): string {
+		return this.alias;
+	}
+
+	public setAlias(alias: string): void {
+		this.alias = alias;
 	}
 
 	public send<T>(data: T): void {

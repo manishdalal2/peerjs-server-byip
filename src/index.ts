@@ -69,6 +69,9 @@ function PeerServer(
 		server = http.createServer(app);
 	}
 
+	// Increase max listeners to prevent warning when multiple services attach listeners
+	server.setMaxListeners(0);
+
 	const peerjs = ExpressPeerServer(server, newOptions);
 	app.use(peerjs);
 

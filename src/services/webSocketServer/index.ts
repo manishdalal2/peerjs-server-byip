@@ -10,6 +10,7 @@ import { WebSocketServer as Server } from "ws";
 import type { Server as HttpServer } from "node:http";
 import type { Server as HttpsServer } from "node:https";
 import { IMessage } from "../../models/message.js";
+import { generateAlias } from "../../utils/aliasGenerator.ts";
 
 export interface IWebSocketServer extends EventEmitter {
 	readonly path: string;
@@ -70,6 +71,20 @@ export class WebSocketServer extends EventEmitter implements IWebSocketServer {
 			this._onSocketError(error);
 		});
 
+		// Extract IP address (handle proxied requests)
+		const forwardedFor = req.headers["x-forwarded-for"];
+		let ip = req.socket.remoteAddress ?? "unknown";
+		
+		if (forwardedFor) {
+			const forwardedIp = Array.isArray(forwardedFor) 
+				? forwardedFor[0] ?? ""
+				: forwardedFor;
+			const firstIp = forwardedIp.split(",")[0];
+			if (firstIp) {
+				ip = firstIp.trim();
+			}
+		}
+
 		// We are only interested in the query, the base url is therefore not relevant
 		const { searchParams } = new URL(req.url ?? "", "https://peerjs");
 		const { id, token, key } = Object.fromEntries(searchParams.entries());
@@ -104,7 +119,7 @@ export class WebSocketServer extends EventEmitter implements IWebSocketServer {
 			return;
 		}
 
-		this._registerClient({ socket, id, token });
+		this._registerClient({ socket, id, token, ip });
 	}
 
 	private _onSocketError(error: Error): void {
@@ -116,10 +131,12 @@ export class WebSocketServer extends EventEmitter implements IWebSocketServer {
 		socket,
 		id,
 		token,
+		ip,
 	}: {
 		socket: WebSocket;
 		id: string;
 		token: string;
+		ip: string;
 	}): void {
 		// Check concurrent limit
 		const clientsCount = this.realm.getClientsIds().length;
@@ -130,10 +147,22 @@ export class WebSocketServer extends EventEmitter implements IWebSocketServer {
 		}
 
 		const newClient: IClient = new Client({ id, token });
+		newClient.setIpAddress(ip);
+		newClient.setAlias(generateAlias());
 		this.realm.setClient(newClient, id);
 		socket.send(JSON.stringify({ type: MessageType.OPEN }));
 
 		this._configureWS(socket, newClient);
+
+		// Notify other clients in the same IP group about the new peer
+		this._notifyIpGroup(ip, newClient.getId(), {
+			type: MessageType.PEER_JOINED_IP_GROUP,
+			payload: {
+				id: newClient.getId(),
+				alias: newClient.getAlias(),
+				ip: ip,
+			},
+		});
 	}
 
 	private _configureWS(socket: WebSocket, client: IClient): void {
@@ -142,7 +171,24 @@ export class WebSocketServer extends EventEmitter implements IWebSocketServer {
 		// Cleanup after a socket closes.
 		socket.on("close", () => {
 			if (client.getSocket() === socket) {
-				this.realm.removeClientById(client.getId());
+				const clientIp = client.getIpAddress();
+				const clientId = client.getId();
+				const clientAlias = client.getAlias();
+
+				this.realm.removeClientById(clientId);
+
+				// Notify other clients in the same IP group about the peer leaving
+				if (clientIp) {
+					this._notifyIpGroup(clientIp, clientId, {
+						type: MessageType.PEER_LEFT_IP_GROUP,
+						payload: {
+							id: clientId,
+							alias: clientAlias,
+							ip: clientIp,
+						},
+					});
+				}
+
 				this.emit("close", client);
 			}
 		});
@@ -173,6 +219,36 @@ export class WebSocketServer extends EventEmitter implements IWebSocketServer {
 		);
 
 		socket.close();
+	}
+
+	/**
+	 * Notify all clients in the same IP group about a peer event
+	 * @param ip - The IP address of the group
+	 * @param excludeClientId - Client ID to exclude from notification (usually the one triggering the event)
+	 * @param message - The message to send
+	 */
+	private _notifyIpGroup(
+		ip: string,
+		excludeClientId: string,
+		message: { type: MessageType; payload: unknown },
+	): void {
+		const ipGroup = this.realm.getClientsByIp(ip);
+		if (!ipGroup) return;
+
+		for (const [clientId, client] of ipGroup) {
+			// Don't notify the client that triggered the event
+			if (clientId === excludeClientId) continue;
+
+			const socket = client.getSocket();
+			if (socket && socket.readyState === 1) {
+				// WebSocket.OPEN = 1
+				try {
+					socket.send(JSON.stringify(message));
+				} catch (e) {
+					// Ignore send errors for now
+				}
+			}
+		}
 	}
 }
 
