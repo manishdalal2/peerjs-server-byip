@@ -1,5 +1,5 @@
 {
-	"name": "peer",
+	"name": "peer-by-ip",
 	"version": "1.0.2",
 	"keywords": [
 		"peerjs",
@@ -7,14 +7,13 @@
 		"p2p",
 		"rtc"
 	],
-	"description": "PeerJS server component",
-	"homepage": "https://peerjs.com",
+	"description": "Forked by PeerJS server",
 	"bugs": {
-		"url": "https://github.com/peers/peerjs-server/issues"
+		"url": "https://github.com/manishdalal2/peerjs-server-byip/issues"
 	},
 	"repository": {
 		"type": "git",
-		"url": "https://github.com/peers/peerjs-server"
+		"url": "https://github.com/manishdalal2/peerjs-server-byip"
 	},
 	"license": "MIT",
 	"contributors": [],
@@ -63,12 +62,12 @@
 	"scripts": {
 		"format": "prettier --write .",
 		"format:check": "prettier --check .",
-		"build": "parcel build",
+		"build": "parcel build --dist-dir dist",
 		"lint": "eslint --ext .js,.ts . && npm run check",
 		"check": "tsc --noEmit",
 		"test": "npm run lint && jest",
 		"coverage": "jest --coverage",
-		"start": "node dist/bin/peerjs.js --port ${PORT:=9000}",
+		"start": "node dist/bin/peerjs.js --port ${PORT:=9000} --allow_discovery --cors '*'",
 		"dev": "nodemon --watch src -e ts --exec 'npm run build && npm run start'",
 		"semantic-release": "semantic-release"
 	},
@@ -102,6 +101,7 @@
 		"eslint": "^8.0.0",
 		"jest": "^29.4.2",
 		"mock-socket": "^9.1.5",
+		"nodemon": "^3.1.14",
 		"parcel": "~2.15.0",
 		"prettier": "^3.0.0",
 		"semantic-release": "^22.0.0",
