@@ -29,8 +29,8 @@ export class Client implements IClient {
 	private readonly token: string;
 	private socket: WebSocket | null = null;
 	private lastPing: number = new Date().getTime();
-	private ipAddress: string = "";
-	private alias: string = "";
+	private ipAddress = "";
+	private alias = "";
 
 	constructor({ id, token }: { id: string; token: string }) {
 		this.id = id;

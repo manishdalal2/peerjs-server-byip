@@ -51,10 +51,12 @@ export class Realm implements IRealm {
 		// Add to IP-based grouping
 		const ip = client.getIpAddress();
 		if (ip) {
-			if (!this.clientsByIp.has(ip)) {
-				this.clientsByIp.set(ip, new Map());
+			let ipGroup = this.clientsByIp.get(ip);
+			if (!ipGroup) {
+				ipGroup = new Map();
+				this.clientsByIp.set(ip, ipGroup);
 			}
-			this.clientsByIp.get(ip)!.set(id, client);
+			ipGroup.set(id, client);
 		}
 	}
 

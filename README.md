@@ -243,32 +243,6 @@ Read [/src/api/README.md](src/api/README.md)
 $ npm test
 ```
 
-## Docker
-
-We have 'ready to use' images on docker hub:
-https://hub.docker.com/r/peerjs/peerjs-server
-
-To run the latest image:
-
-```sh
-$ docker run -p 9000:9000 -d peerjs/peerjs-server
-```
-
-You can build a new image simply by calling:
-
-```sh
-$ docker build -t myimage https://github.com/peers/peerjs-server.git
-```
-
-To run the image execute this:
-
-```sh
-$ docker run -p 9000:9000 -d myimage
-```
-
-This will start a peerjs server on port 9000 exposed on port 9000 with key `peerjs` on path `/myapp`.
-
-Open your browser with http://localhost:9000/myapp It should returns JSON with name, description and website fields. http://localhost:9000/myapp/peerjs/id - should returns a random string (random client id)
 
 ## Running in Google App Engine
 
