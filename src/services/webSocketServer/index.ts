@@ -43,10 +43,10 @@ type CustomConfig = Pick<
 
 const WS_PATH = "peerjs";
 
-type ClientProfilePayload = {
+interface ClientProfilePayload {
 	name?: unknown;
 	pin?: unknown;
-};
+}
 
 function normalizeProfileName(name: unknown): string {
 	return typeof name === "string" ? name.trim().slice(0, 50) : "";

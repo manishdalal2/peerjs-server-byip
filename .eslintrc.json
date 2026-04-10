@@ -6,7 +6,7 @@
 		"plugin:@typescript-eslint/strict-type-checked",
 		"plugin:@typescript-eslint/stylistic-type-checked"
 	],
-	"ignorePatterns": ["coverage", "jest.config.js", "dist", "__test__", "server.js"],
+	"ignorePatterns": ["coverage", "jest.config.js", "dist", "__test__", "server.js", "client/**/*"],
 	"env": {
 		"node": true,
 		"es6": true
