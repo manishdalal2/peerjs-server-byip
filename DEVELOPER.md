@@ -109,10 +109,10 @@ The `release.yml` workflow runs on every push to `master`:
 
 | Workflow | Trigger | Purpose |
 |----------|---------|---------|
-| `node.js.yml` | Push/PR to master | CI testing on Node 16/18/20 |
-| `release.yml` | Push to master | NPM publish + GitHub release |
-| `prettier.yml` | Any push/PR | Code formatting check |
-| `master_localbytes.yml` | Manual only | Deploy to Azure (disabled) |
+| `node.js.yml` | PR to `master`, manual dispatch | CI testing on Node 16/18/20 |
+| `release.yml` | Push to `master` | NPM publish + GitHub release |
+| `prettier.yml` | PRs, manual dispatch | Code formatting check |
+| `master_localbytes.yml` | Push to `master`, manual dispatch | Build and deploy to Azure App Service |
 
 ### Running Workflows Locally
 
@@ -134,12 +134,17 @@ act -s NPM_TOKEN=fake_token -s GITHUB_TOKEN=fake_token push
 
 ### Workflow Execution Order
 
-When pushing to `master`, all 4 workflows run in parallel:
+When opening a pull request to `master`, these workflows run:
 
-1. **prettier.yml** (~1 min) - Format check
-2. **node.js.yml** (~3-5 min) - Test on multiple Node versions
-3. **release.yml** (~2-3 min) - Semantic release
-4. **master_localbytes.yml** - Disabled (manual trigger only)
+1. **node.js.yml** - Build, lint, and coverage across Node 16/18/20
+2. **prettier.yml** - Format check
+
+When pushing to `master`, these workflows run:
+
+1. **release.yml** - Semantic release
+2. **master_localbytes.yml** - Build and deploy to Azure
+
+The Azure deployment workflow installs dependencies with `npm ci`, builds the project, uploads the full repository artifact, and deploys it so runtime files such as `server.js` and `index.html` are available in App Service.
 
 ## Environment Setup
 

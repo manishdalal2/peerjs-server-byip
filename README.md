@@ -8,6 +8,36 @@ PeerServer helps establishing connections between PeerJS clients. Data is not pr
 
 **This fork adds IP-based peer discovery**, allowing peers to only discover and connect with other peers on the same network/IP address.
 
+## Local web app and Azure deployment
+
+This repository can also be run as a single web app that serves both:
+
+- the PeerJS signaling server
+- the browser client in `index.html`
+
+Use:
+
+```sh
+npm run build
+npm start
+```
+
+The `start` script runs `server.js`, which:
+
+- serves `index.html` at `/`
+- mounts the PeerJS server at `/peerjs`
+- uses `process.env.PORT` when available, which makes it compatible with Azure App Service
+
+The browser client is configured for same-origin deployment. It derives its host, port, and protocol from `window.location`, so the same `index.html` works both locally and on Azure without hard-coded hostnames.
+
+When deploying to Azure App Service, configure the app startup command as:
+
+```sh
+npm start
+```
+
+The Azure deployment workflow in this repository deploys the full app artifact, not just `dist/`, because runtime files such as `server.js` and `index.html` live at the repository root.
+
 ## Usage
 
 ### Run server
@@ -30,32 +60,6 @@ If you don't want to develop anything, just enter few commands below.
 
 3. Check it: http://127.0.0.1:9000/myapp It should returns JSON with name, description and website fields.
 
-### Create a custom server:
-
-If you have your own server, you can attach PeerServer.
-
-1. Install the package:
-
-   ```bash
-   # $ cd your-project-path
-
-   # with npm
-   $ npm install peer-by-ip
-
-   # with yarn
-   $ yarn add peer-by-ip
-   ```
-
-2. Use PeerServer object to create a new server:
-
-   ```javascript
-   const { PeerServer } = require("peer-by-ip");
-
-   const peerServer = PeerServer({ port: 9000, path: "/myapp" });
-   ```
-
-3. Check it: http://127.0.0.1:9000/myapp It should returns JSON with name, description and website fields.
-
 ### Connecting to the server from client PeerJS:
 
 ```html
@@ -64,6 +68,20 @@ If you have your own server, you can attach PeerServer.
 		host: "localhost",
 		port: 9000,
 		path: "/myapp",
+	});
+</script>
+```
+
+For same-origin browser deployments, you can also derive the connection settings from the current page URL:
+
+```html
+<script>
+	const peer = new Peer({
+		host: window.location.hostname,
+		port: Number(window.location.port) || (window.location.protocol === "https:" ? 443 : 80),
+		path: "/",
+		key: "peerjs",
+		secure: window.location.protocol === "https:",
 	});
 </script>
 ```
@@ -216,12 +234,34 @@ peerServer.on('disconnect', (client) => { ... });
 
 Read [/src/api/README.md](src/api/README.md)
 
+### IP-based discovery notes
+
+The `/peerjs/by-ip` endpoint groups clients by normalized client IP.
+
+When the server is deployed behind a proxy such as Azure App Service, forwarded addresses may include a port suffix. This fork strips that port before grouping, so addresses such as `108.245.18.61:53600` and `108.245.18.61:54918` are treated as the same IP group.
+
+### Debug endpoint protection
+
+The `/peerjs/groups` endpoint is intended only for debugging.
+
+It is disabled by default and returns `404` unless the `PEERJS_GROUPS_TOKEN` environment variable is set.
+
+If you enable it, requests must include the token either as:
+
+- header `x-peerjs-groups-token`
+- query string `?token=...`
+
+Example:
+
+```sh
+curl -H "x-peerjs-groups-token: YOUR_SECRET" http://127.0.0.1:9000/peerjs/groups
+```
+
 ## Running tests
 
 ```sh
 $ npm test
 ```
-
 
 ## Running in Google App Engine
 
