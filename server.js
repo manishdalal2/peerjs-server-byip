@@ -21,7 +21,7 @@ const server = http.createServer(app);
 const peerServer = ExpressPeerServer(server, {
 	path: "/",
 	allow_discovery: true,
-	corsOptions: { origin: "*" },
+	corsOptions: { origin: true },
 });
 
 app.use(peerServer);
