@@ -82,6 +82,46 @@ describe("Transmission handler", () => {
 		expect(sent).toBe(true);
 	});
 
+	it("should reject offer when destination peer requires a PIN and none is provided", () => {
+		const realm = new Realm();
+		const handleTransmission = TransmissionHandler({ realm });
+
+		const clientFrom = new Client({ id: "id1", token: "" });
+		const clientTo = new Client({ id: "id2", token: "" });
+		const socketFrom = createFakeSocket();
+		const socketTo = createFakeSocket();
+
+		clientFrom.setSocket(socketFrom);
+		clientTo.setSocket(socketTo);
+		clientTo.setPin("1234");
+		realm.setClient(clientFrom, clientFrom.getId());
+		realm.setClient(clientTo, clientTo.getId());
+
+		let errorSent = false;
+		let forwarded = false;
+
+		socketFrom.send = (data: string): void => {
+			const parsed = JSON.parse(data);
+			if (parsed?.type === MessageType.ERROR) {
+				errorSent = parsed.payload?.msg === "Invalid PIN provided for peer connection";
+			}
+		};
+
+		socketTo.send = (): void => {
+			forwarded = true;
+		};
+
+		handleTransmission(clientFrom, {
+			type: MessageType.OFFER,
+			src: clientFrom.getId(),
+			dst: clientTo.getId(),
+			payload: { metadata: {} },
+		});
+
+		expect(errorSent).toBe(true);
+		expect(forwarded).toBe(false);
+	});
+
 	it("should send LEAVE message to source client when sending to destination client failed", () => {
 		const realm = new Realm();
 		const handleTransmission = TransmissionHandler({ realm });

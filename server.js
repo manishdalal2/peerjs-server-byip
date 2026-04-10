@@ -11,6 +11,9 @@ const port = process.env.PORT || 9000;
 
 const app = express();
 
+// Serve static files from the client folder (for assets like ring.mp3)
+app.use("/client", express.static(path.join(__dirname, "client")));
+
 // Serve index.html at the root so browsing to the site loads the client UI
 app.get("/", (_req, res) => {
 	res.sendFile(path.join(__dirname, "index.html"));

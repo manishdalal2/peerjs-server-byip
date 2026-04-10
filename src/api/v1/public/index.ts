@@ -2,6 +2,16 @@ import express from "express";
 import type { IConfig } from "../../../config/index.ts";
 import type { IRealm } from "../../../models/realm.ts";
 
+function serializePeer(client: ReturnType<IRealm["getClientById"]> extends infer T ? Exclude<T, undefined> : never) {
+	return {
+		id: client.getId(),
+		alias: client.getAlias(),
+		name: client.getName(),
+		displayName: client.getDisplayName(),
+		hasPin: client.getPin() !== null,
+	};
+}
+
 function normalizeClientIp(ip: string): string {
 	const trimmedIp = ip.trim();
 
@@ -86,10 +96,7 @@ export default ({
 				return res.send([]);
 			}
 
-			const peers = Array.from(ipGroup.values()).map((client) => ({
-				id: client.getId(),
-				alias: client.getAlias(),
-			}));
+			const peers = Array.from(ipGroup.values()).map((client) => serializePeer(client));
 
 			return res.send(peers);
 		}
@@ -104,14 +111,14 @@ export default ({
 		}
 
 		if (config.allow_discovery) {
-			const result: Record<string, { id: string; alias: string }[]> = {};
+			const result: Record<
+				string,
+				{ id: string; alias: string; name: string; displayName: string; hasPin: boolean }[]
+			> = {};
 
 			const ipGroups = Array.from(realm.getAllIpGroups().entries());
 			for (const [ip, clients] of ipGroups) {
-				result[ip] = Array.from(clients.values()).map((client) => ({
-					id: client.getId(),
-					alias: client.getAlias(),
-				}));
+				result[ip] = Array.from(clients.values()).map((client) => serializePeer(client));
 			}
 
 			return res.send(result);

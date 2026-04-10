@@ -3,63 +3,84 @@ import type { IClient } from "../../../models/client.ts";
 import type { IMessage } from "../../../models/message.ts";
 import type { IRealm } from "../../../models/realm.ts";
 
+function getRequestedPin(payload: unknown): string | null {
+  if (!payload || typeof payload !== "object") {
+    return null;
+  }
+
+  const metadata = (payload as { metadata?: unknown }).metadata;
+
+  if (!metadata || typeof metadata !== "object") {
+    return null;
+  }
+
+  const pin = (metadata as { pin?: unknown }).pin;
+
+  return typeof pin === "string" && pin.trim() ? pin.trim() : null;
+}
+
 export const TransmissionHandler = ({
-	realm,
+  realm,
 }: {
-	realm: IRealm;
+  realm: IRealm;
 }): ((client: IClient | undefined, message: IMessage) => boolean) => {
-	const handle = (client: IClient | undefined, message: IMessage) => {
-		const type = message.type;
-		const srcId = message.src;
-		const dstId = message.dst;
+  const handle = (client: IClient | undefined, message: IMessage) => {
+    const type = message.type;
+    const srcId = message.src;
+    const dstId = message.dst;
 
-		const destinationClient = realm.getClientById(dstId);
+    const destinationClient = realm.getClientById(dstId);
 
-		// User is connected!
-		if (destinationClient) {
-			const socket = destinationClient.getSocket();
-			try {
-				if (socket) {
-					const data = JSON.stringify(message);
+    if (destinationClient) {
+      if (type === MessageType.OFFER) {
+        const expectedPin = destinationClient.getPin();
+        const requestedPin = getRequestedPin(message.payload);
 
-					socket.send(data);
-				} else {
-					// Neither socket no res available. Peer dead?
-					throw new Error("Peer dead");
-				}
-			} catch (e) {
-				// This happens when a peer disconnects without closing connections and
-				// the associated WebSocket has not closed.
-				// Tell other side to stop trying.
-				if (socket) {
-					socket.close();
-				} else {
-					realm.removeClientById(destinationClient.getId());
-				}
+        if (expectedPin && requestedPin !== expectedPin) {
+          client?.send({
+            type: MessageType.ERROR,
+            payload: { msg: "Invalid PIN provided for peer connection" },
+          });
 
-				handle(client, {
-					type: MessageType.LEAVE,
-					src: dstId,
-					dst: srcId,
-				});
-			}
-		} else {
-			// Wait for this client to connect/reconnect (XHR) for important
-			// messages.
-			const ignoredTypes = [MessageType.LEAVE, MessageType.EXPIRE];
+          return true;
+        }
+      }
 
-			if (!ignoredTypes.includes(type) && dstId) {
-				realm.addMessageToQueue(dstId, message);
-			} else if (type === MessageType.LEAVE && !dstId) {
-				realm.removeClientById(srcId);
-			} else {
-				// Unavailable destination specified with message LEAVE or EXPIRE
-				// Ignore
-			}
-		}
+      const socket = destinationClient.getSocket();
 
-		return true;
-	};
+      try {
+        if (socket) {
+          const data = JSON.stringify(message);
 
-	return handle;
+          socket.send(data);
+        } else {
+          throw new Error("Peer dead");
+        }
+      } catch (e) {
+        if (socket) {
+          socket.close();
+        } else {
+          realm.removeClientById(destinationClient.getId());
+        }
+
+        handle(client, {
+          type: MessageType.LEAVE,
+          src: dstId,
+          dst: srcId,
+        });
+      }
+    } else {
+      const ignoredTypes = [MessageType.LEAVE, MessageType.EXPIRE];
+
+      if (!ignoredTypes.includes(type) && dstId) {
+        realm.addMessageToQueue(dstId, message);
+      } else if (type === MessageType.LEAVE && !dstId) {
+        realm.removeClientById(srcId);
+      }
+    }
+
+    return true;
+  };
+
+  return handle;
 };

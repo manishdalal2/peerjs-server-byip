@@ -21,6 +21,16 @@ export interface IClient {
 
 	setAlias(alias: string): void;
 
+	getName(): string;
+
+	setName(name: string): void;
+
+	getPin(): string | null;
+
+	setPin(pin: string | null): void;
+
+	getDisplayName(): string;
+
 	send<T>(data: T): void;
 }
 
@@ -31,6 +41,8 @@ export class Client implements IClient {
 	private lastPing: number = new Date().getTime();
 	private ipAddress = "";
 	private alias = "";
+	private name = "";
+	private pin: string | null = null;
 
 	constructor({ id, token }: { id: string; token: string }) {
 		this.id = id;
@@ -75,6 +87,26 @@ export class Client implements IClient {
 
 	public setAlias(alias: string): void {
 		this.alias = alias;
+	}
+
+	public getName(): string {
+		return this.name;
+	}
+
+	public setName(name: string): void {
+		this.name = name;
+	}
+
+	public getPin(): string | null {
+		return this.pin;
+	}
+
+	public setPin(pin: string | null): void {
+		this.pin = pin;
+	}
+
+	public getDisplayName(): string {
+		return this.name || this.alias || this.id;
 	}
 
 	public send<T>(data: T): void {

@@ -241,4 +241,35 @@ describe("WebSocketServer", () => {
 
 		await c3.destroy?.();
 	});
+
+	it("should store editable peer name and optional pin from SET_PEER_PROFILE messages", async () => {
+		const realm = new Realm();
+		const config = { path: "/", key: "testKey", concurrent_limit: 2 };
+		const url = `ws://localhost:8080/peerjs-profile?key=${config.key}&id=user1&token=token1`;
+		const webSocketServer = createTestServer({ url, realm, config });
+		const ws = new WebSocket(url);
+
+		expect(await checkOpen(ws)).toBe(true);
+
+		ws.send(
+			JSON.stringify({
+				type: MessageType.SET_PEER_PROFILE,
+				payload: {
+					name: "Manish",
+					pin: "4321",
+				},
+			}),
+		);
+
+		await wait(10);
+
+		const client = realm.getClientById("user1");
+
+		expect(client?.getName()).toBe("Manish");
+		expect(client?.getDisplayName()).toBe("Manish");
+		expect(client?.getPin()).toBe("4321");
+
+		ws.close();
+		await webSocketServer.destroy?.();
+	});
 });

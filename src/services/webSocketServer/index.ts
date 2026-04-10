@@ -43,6 +43,25 @@ type CustomConfig = Pick<
 
 const WS_PATH = "peerjs";
 
+type ClientProfilePayload = {
+	name?: unknown;
+	pin?: unknown;
+};
+
+function normalizeProfileName(name: unknown): string {
+	return typeof name === "string" ? name.trim().slice(0, 50) : "";
+}
+
+function normalizeProfilePin(pin: unknown): string | null {
+	if (typeof pin !== "string") {
+		return null;
+	}
+
+	const trimmedPin = pin.trim();
+
+	return trimmedPin ? trimmedPin.slice(0, 50) : null;
+}
+
 export class WebSocketServer extends EventEmitter implements IWebSocketServer {
 	public readonly path: string;
 	private readonly realm: IRealm;
@@ -149,6 +168,39 @@ export class WebSocketServer extends EventEmitter implements IWebSocketServer {
 		this.emit("error", error);
 	}
 
+	private _buildPeerPayload(client: IClient): {
+		id: string;
+		alias: string;
+		name: string;
+		displayName: string;
+		hasPin: boolean;
+		ip: string;
+	} {
+		return {
+			id: client.getId(),
+			alias: client.getAlias(),
+			name: client.getName(),
+			displayName: client.getDisplayName(),
+			hasPin: client.getPin() !== null,
+			ip: client.getIpAddress(),
+		};
+	}
+
+	private _handleProfileUpdate(client: IClient, payload: ClientProfilePayload): void {
+		client.setName(normalizeProfileName(payload.name));
+		client.setPin(normalizeProfilePin(payload.pin));
+
+		const clientIp = client.getIpAddress();
+		if (!clientIp) {
+			return;
+		}
+
+		this._notifyIpGroup(clientIp, client.getId(), {
+			type: MessageType.PEER_METADATA_UPDATED,
+			payload: this._buildPeerPayload(client),
+		});
+	}
+
 	private _registerClient({
 		socket,
 		id,
@@ -179,11 +231,7 @@ export class WebSocketServer extends EventEmitter implements IWebSocketServer {
 		// Notify other clients in the same IP group about the new peer
 		this._notifyIpGroup(ip, newClient.getId(), {
 			type: MessageType.PEER_JOINED_IP_GROUP,
-			payload: {
-				id: newClient.getId(),
-				alias: newClient.getAlias(),
-				ip: ip,
-			},
+			payload: this._buildPeerPayload(newClient),
 		});
 	}
 
@@ -195,7 +243,7 @@ export class WebSocketServer extends EventEmitter implements IWebSocketServer {
 			if (client.getSocket() === socket) {
 				const clientIp = client.getIpAddress();
 				const clientId = client.getId();
-				const clientAlias = client.getAlias();
+				const peerPayload = this._buildPeerPayload(client);
 
 				this.realm.removeClientById(clientId);
 
@@ -203,11 +251,7 @@ export class WebSocketServer extends EventEmitter implements IWebSocketServer {
 				if (clientIp) {
 					this._notifyIpGroup(clientIp, clientId, {
 						type: MessageType.PEER_LEFT_IP_GROUP,
-						payload: {
-							id: clientId,
-							alias: clientAlias,
-							ip: clientIp,
-						},
+						payload: peerPayload,
 					});
 				}
 
@@ -220,6 +264,14 @@ export class WebSocketServer extends EventEmitter implements IWebSocketServer {
 			try {
 				// eslint-disable-next-line @typescript-eslint/no-base-to-string
 				const message = JSON.parse(data.toString()) as Writable<IMessage>;
+
+				if (message.type === MessageType.SET_PEER_PROFILE) {
+					this._handleProfileUpdate(
+						client,
+						(message.payload as ClientProfilePayload | undefined) ?? {},
+					);
+					return;
+				}
 
 				message.src = client.getId();
 
