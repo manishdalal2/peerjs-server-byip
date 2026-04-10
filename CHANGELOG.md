@@ -1,3 +1,10 @@
+## [1.0.1](https://github.com/manishdalal2/peerjs-server-byip/compare/v1.0.0...v1.0.1) (2026-04-10)
+
+
+### Bug Fixes
+
+* update STUN server URL and change CORS origin to true ([111eb6d](https://github.com/manishdalal2/peerjs-server-byip/commit/111eb6d56ccb94f3515dd13d88b0b67027748ab3))
+
 # 1.0.0 (2026-03-31)
 
 
