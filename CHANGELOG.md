@@ -1,3 +1,10 @@
+# [1.1.0](https://github.com/manishdalal2/peerjs-server-byip/compare/v1.0.1...v1.1.0) (2026-04-10)
+
+
+### Features
+
+* add IP normalization and secure /groups endpoint with token authentication ([d757aa1](https://github.com/manishdalal2/peerjs-server-byip/commit/d757aa17c277257b22c5251059b763c62915aff7))
+
 ## [1.0.1](https://github.com/manishdalal2/peerjs-server-byip/compare/v1.0.0...v1.0.1) (2026-04-10)
 
 
