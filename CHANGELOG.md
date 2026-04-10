@@ -1,3 +1,15 @@
+# [1.2.0](https://github.com/manishdalal2/peerjs-server-byip/compare/v1.1.0...v1.2.0) (2026-04-10)
+
+
+### Bug Fixes
+
+* Add main CSS styles for application layout and components ([a4885a5](https://github.com/manishdalal2/peerjs-server-byip/commit/a4885a562e34c4afdd293cc1605cc8f94fa11a13))
+
+
+### Features
+
+* implement welcome modal and about button, enhance SEO metadata ([b521695](https://github.com/manishdalal2/peerjs-server-byip/commit/b521695c58751f3090948709edf09d0bb056b4de))
+
 # [1.1.0](https://github.com/manishdalal2/peerjs-server-byip/compare/v1.0.1...v1.1.0) (2026-04-10)
 
 
