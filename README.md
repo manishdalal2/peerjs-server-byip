@@ -30,6 +30,14 @@ The `start` script runs `server.js`, which:
 
 The browser client is configured for same-origin deployment. It derives its host, port, and protocol from `window.location`, so the same `index.html` works both locally and on Azure without hard-coded hostnames.
 
+The bundled browser client also supports lightweight peer profiles:
+
+- each peer gets a random alias by default
+- a user can set a custom display name
+- a user can optionally set a PIN to require it before another peer connects
+
+If no PIN is set, the peer remains open for connections.
+
 When deploying to Azure App Service, configure the app startup command as:
 
 ```sh
@@ -86,6 +94,43 @@ For same-origin browser deployments, you can also derive the connection settings
 </script>
 ```
 
+### Editable names and optional PINs
+
+Each connected peer now has three name-related fields on the server:
+
+- `alias`: a random fallback name generated when the peer first connects
+- `name`: a user-defined editable name, which is optional
+- `displayName`: the effective display label exposed to clients, resolved as `name || alias || id`
+
+Peers can update their own profile over the websocket connection by sending:
+
+```json
+{
+	"type": "SET-PEER-PROFILE",
+	"payload": {
+		"name": "Alice",
+		"pin": "1234"
+	}
+}
+```
+
+Notes:
+
+- leaving `name` blank restores the random alias as the visible fallback
+- leaving `pin` blank removes PIN protection
+- PIN protection is optional and defaults to no PIN
+
+To connect to a peer with a PIN, include the PIN in PeerJS connection metadata on the initial connection attempt:
+
+```javascript
+const conn = peer.connect(targetPeerId, {
+	reliable: true,
+	metadata: { pin: "1234" },
+});
+```
+
+If the destination peer has a PIN configured and the provided PIN is missing or wrong, the server rejects the `OFFER` and the caller receives a websocket `ERROR` message with `payload.msg` set to `"Invalid PIN provided for peer connection"`.
+
 ## Config / CLI options
 
 You can provide config object to `PeerServer` function or specify options for `peerjs` CLI.
@@ -105,131 +150,6 @@ You can provide config object to `PeerServer` function or specify options for `p
 | `--cors`                 | `corsOptions`      | The CORS origins that can access this server                                                                                                                                                                                                          |
 |                          | `generateClientId` | A function which generate random client IDs when calling `/id` API method (`() => string`)                                                                                                                                                            |    No    | `uuid/v4`  |
 
-## Using HTTPS
-
-Simply pass in PEM-encoded certificate and key.
-
-```javascript
-const fs = require("fs");
-const { PeerServer } = require("peer");
-
-const peerServer = PeerServer({
-	port: 9000,
-	ssl: {
-		key: fs.readFileSync("/path/to/your/ssl/key/here.key"),
-		cert: fs.readFileSync("/path/to/your/ssl/certificate/here.crt"),
-	},
-});
-```
-
-You can also pass any other [SSL options accepted by https.createServer](https://nodejs.org/api/https.html#https_https_createserver_options_requestlistenerfrom), such as `SNICallback:
-
-```javascript
-const fs = require("fs");
-const { PeerServer } = require("peer");
-
-const peerServer = PeerServer({
-	port: 9000,
-	ssl: {
-		SNICallback: (servername, cb) => {
-			// your code here ....
-		},
-	},
-});
-```
-
-## Running PeerServer behind a reverse proxy
-
-Make sure to set the `proxied` option, otherwise IP based limiting will fail.
-The option is passed verbatim to the
-[expressjs `trust proxy` setting](http://expressjs.com/4x/api.html#app-settings)
-if it is truthy.
-
-```javascript
-const { PeerServer } = require("peer");
-
-const peerServer = PeerServer({
-	port: 9000,
-	path: "/myapp",
-	proxied: true,
-});
-```
-
-## Custom client ID generation
-
-By default, PeerServer uses `uuid/v4` npm package to generate random client IDs.
-
-You can set `generateClientId` option in config to specify a custom function to generate client IDs.
-
-```javascript
-const { PeerServer } = require("peer");
-
-const customGenerationFunction = () =>
-	(Math.random().toString(36) + "0000000000000000000").substr(2, 16);
-
-const peerServer = PeerServer({
-	port: 9000,
-	path: "/myapp",
-	generateClientId: customGenerationFunction,
-});
-```
-
-Open http://127.0.0.1:9000/myapp/peerjs/id to see a new random id.
-
-## Combining with existing express app
-
-```javascript
-const express = require("express");
-const { ExpressPeerServer } = require("peer-by-ip");
-
-const app = express();
-
-app.get("/", (req, res, next) => res.send("Hello world!"));
-
-// =======
-
-const server = app.listen(9000);
-
-const peerServer = ExpressPeerServer(server, {
-	path: "/myapp",
-});
-
-app.use("/peerjs", peerServer);
-
-// == OR ==
-
-const http = require("http");
-
-const server = http.createServer(app);
-const peerServer = ExpressPeerServer(server, {
-	debug: true,
-	path: "/myapp",
-});
-
-app.use("/peerjs", peerServer);
-
-server.listen(9000);
-
-// ========
-```
-
-Open the browser and check http://127.0.0.1:9000/peerjs/myapp
-
-## Events
-
-The `'connection'` event is emitted when a peer connects to the server.
-
-```javascript
-peerServer.on('connection', (client) => { ... });
-```
-
-The `'disconnect'` event is emitted when a peer disconnects from the server or
-when the peer can no longer be reached.
-
-```javascript
-peerServer.on('disconnect', (client) => { ... });
-```
-
 ## HTTP API
 
 Read [/src/api/README.md](src/api/README.md)
@@ -238,7 +158,21 @@ Read [/src/api/README.md](src/api/README.md)
 
 The `/peerjs/by-ip` endpoint groups clients by normalized client IP.
 
+Each peer returned from `/peerjs/:key/by-ip` includes:
+
+- `id`
+- `alias`
+- `name`
+- `displayName`
+- `hasPin`
+
 When the server is deployed behind a proxy such as Azure App Service, forwarded addresses may include a port suffix. This fork strips that port before grouping, so addresses such as `108.245.18.61:53600` and `108.245.18.61:54918` are treated as the same IP group.
+
+The websocket server also emits IP-group update events carrying the same peer metadata shape:
+
+- `PEER-JOINED-IP-GROUP`
+- `PEER-LEFT-IP-GROUP`
+- `PEER-METADATA-UPDATED`
 
 ### Debug endpoint protection
 

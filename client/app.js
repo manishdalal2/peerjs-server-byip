@@ -604,6 +604,41 @@ if (mobileMenuBtn && mobileOverlay) {
 window.addEventListener('beforeunload', () => { conn?.close(); peer?.destroy(); });
 window.addEventListener('load', init);
 
+// ── Welcome modal ─────────────────────────────────────────────────────────────
+const welcomeBackdrop = $('welcomeBackdrop');
+const getStartedBtn   = $('getStartedBtn');
+const aboutBtn        = $('aboutBtn');
+const WELCOME_KEY     = 'localBytesWelcomeSeen';
+
+function showWelcome() {
+    if (!welcomeBackdrop) return;
+    welcomeBackdrop.classList.remove('hidden');
+    // Prime audio: the user will click "Get Started", a real gesture
+}
+
+function hideWelcome() {
+    if (!welcomeBackdrop) return;
+    welcomeBackdrop.classList.add('hidden');
+    localStorage.setItem(WELCOME_KEY, '1');
+    primeAudio();
+}
+
+if (getStartedBtn) getStartedBtn.addEventListener('click', hideWelcome);
+if (aboutBtn)      aboutBtn.addEventListener('click', showWelcome);
+
+// Close on backdrop click (outside the modal card)
+if (welcomeBackdrop) {
+    welcomeBackdrop.addEventListener('click', e => {
+        if (e.target === welcomeBackdrop) hideWelcome();
+    });
+}
+
+// Show on first visit; skip on return visits
+if (!localStorage.getItem(WELCOME_KEY)) {
+    // Small delay so the app renders first and the modal feels intentional
+    setTimeout(showWelcome, 300);
+}
+
 // Prime audio on any user interaction to handle autoplay policies.
 // Keep listening (no `once`) so repeated interactions retry until audio is unlocked.
 ['click', 'keydown', 'touchstart'].forEach(event => {

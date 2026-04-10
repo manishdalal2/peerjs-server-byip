@@ -448,6 +448,316 @@ header h1 { font-size: 1.15em; font-weight: 700; letter-spacing: -0.3px; }
     }
 }
 
+/* ── About button in header ── */
+.about-btn {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    border: 2px solid rgba(255,255,255,0.6);
+    background: rgba(255,255,255,0.15);
+    color: white;
+    font-size: 0.85em;
+    font-weight: 700;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: background 0.2s, border-color 0.2s;
+}
+.about-btn:hover {
+    background: rgba(255,255,255,0.3);
+    border-color: rgba(255,255,255,0.9);
+}
+
+/* ── Welcome modal backdrop ── */
+.welcome-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 15, 30, 0.78);
+    backdrop-filter: blur(6px);
+    -webkit-backdrop-filter: blur(6px);
+    z-index: 1000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 12px;
+    opacity: 1;
+    transition: opacity 0.3s ease;
+    /* Allow backdrop itself to scroll on very short viewports */
+    overflow-y: auto;
+}
+.welcome-backdrop.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+/* ── Modal card ── */
+.welcome-modal {
+    background: #fff;
+    border-radius: 20px;
+    width: 100%;
+    max-width: 640px;
+    /* Never taller than viewport; internal scroll for content */
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
+    box-shadow: 0 32px 100px rgba(0,0,0,0.4);
+    transform: translateY(0) scale(1);
+    transition: transform 0.3s ease, opacity 0.3s ease;
+    scrollbar-width: thin;
+    scrollbar-color: var(--border) transparent;
+    /* Keeps the modal from hugging the top when content is taller than viewport */
+    margin: auto;
+}
+.welcome-backdrop.hidden .welcome-modal {
+    transform: translateY(16px) scale(0.98);
+}
+
+/* ── Hero gradient ── */
+.welcome-hero {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    padding: 40px 32px 30px;
+    border-radius: 20px 20px 0 0;
+    text-align: center;
+    color: white;
+    position: sticky;       /* Keeps hero visible while scrolling on very short viewports */
+    /* Not sticky — remove; it causes issues inside overflow-y:auto */
+}
+.welcome-logo {
+    margin-bottom: 14px;
+    display: flex;
+    justify-content: center;
+}
+.welcome-title {
+    font-size: 2.1em;
+    font-weight: 800;
+    letter-spacing: -0.5px;
+    margin-bottom: 6px;
+}
+.welcome-tagline {
+    font-size: 0.88em;
+    opacity: 0.85;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+}
+
+/* ── Body ── */
+.welcome-body {
+    padding: 28px 32px 32px;
+}
+.welcome-intro {
+    font-size: 0.94em;
+    color: var(--text-muted);
+    line-height: 1.7;
+    text-align: center;
+    margin-bottom: 24px;
+}
+
+/* ── Feature grid ── */
+.feature-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-bottom: 24px;
+}
+.feature-card {
+    display: flex;
+    gap: 11px;
+    align-items: flex-start;
+    background: #F7FAFC;
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 13px 13px;
+    transition: border-color 0.2s, box-shadow 0.2s, transform 0.15s;
+}
+.feature-card:hover {
+    border-color: var(--primary);
+    box-shadow: 0 3px 12px rgba(91,142,240,0.14);
+    transform: translateY(-1px);
+}
+.feature-icon {
+    font-size: 1.45em;
+    flex-shrink: 0;
+    line-height: 1;
+    margin-top: 1px;
+}
+.feature-text {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.feature-text strong {
+    font-size: 0.81em;
+    font-weight: 700;
+    color: var(--text);
+}
+.feature-text span {
+    font-size: 0.75em;
+    color: var(--text-muted);
+    line-height: 1.55;
+}
+
+/* ── Eco card — full-width featured card ── */
+.eco-card {
+    grid-column: 1 / -1;        /* Span both columns */
+    background: linear-gradient(135deg, #e8f5e9 0%, #f1f8e9 50%, #e0f2f1 100%);
+    border: 1.5px solid #81c784;
+    padding: 0;
+    display: block;             /* Override flex from .feature-card */
+    overflow: hidden;
+}
+.eco-card:hover {
+    border-color: #388e3c;
+    box-shadow: 0 4px 18px rgba(56,142,60,0.18);
+    transform: translateY(-1px);
+}
+.eco-card-inner {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    padding: 22px 20px 18px;
+    gap: 10px;
+}
+.eco-icon-wrap {
+    font-size: 2.8em;
+    line-height: 1;
+    filter: drop-shadow(0 2px 6px rgba(56,142,60,0.25));
+    animation: eco-pulse 3s ease-in-out infinite;
+}
+@keyframes eco-pulse {
+    0%, 100% { transform: scale(1); }
+    50%       { transform: scale(1.08); }
+}
+.eco-text {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    max-width: 520px;
+}
+.eco-text strong {
+    font-size: 0.95em;
+    font-weight: 800;
+    color: #1b5e20;
+}
+.eco-text span {
+    font-size: 0.79em;
+    color: #2e7d32;
+    line-height: 1.65;
+}
+.eco-text em {
+    font-style: normal;
+    font-weight: 700;
+    color: #1b5e20;
+}
+.eco-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    justify-content: center;
+    margin-top: 4px;
+}
+.eco-badge {
+    background: rgba(255,255,255,0.75);
+    border: 1px solid #a5d6a7;
+    color: #2e7d32;
+    font-size: 0.72em;
+    font-weight: 700;
+    padding: 4px 10px;
+    border-radius: 20px;
+    white-space: nowrap;
+}
+
+/* ── Footer ── */
+.welcome-footer {
+    border-top: 1px solid var(--border);
+    padding-top: 22px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+}
+.welcome-question {
+    font-size: 0.84em;
+    color: var(--text-muted);
+    margin: 0;
+}
+.github-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    background: #24292e;
+    color: white;
+    text-decoration: none;
+    padding: 9px 18px;
+    border-radius: 8px;
+    font-size: 0.83em;
+    font-weight: 600;
+    transition: background 0.2s, transform 0.15s;
+}
+.github-link:hover {
+    background: #444d56;
+    transform: translateY(-1px);
+}
+.get-started-btn {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+    color: white;
+    border: none;
+    padding: 13px 40px;
+    border-radius: 30px;
+    font-size: 1em;
+    font-weight: 700;
+    cursor: pointer;
+    letter-spacing: 0.02em;
+    transition: opacity 0.2s, transform 0.15s;
+    box-shadow: 0 4px 18px rgba(102,126,234,0.4);
+    width: 100%;
+    max-width: 280px;
+}
+.get-started-btn:hover  { opacity: 0.9; transform: translateY(-1px); }
+.get-started-btn:active { transform: translateY(0); }
+
+/* ── Responsive: tablets (≤ 640px) ── */
+@media (max-width: 640px) {
+    .welcome-hero   { padding: 28px 20px 22px; }
+    .welcome-title  { font-size: 1.7em; }
+    .welcome-body   { padding: 20px 16px 24px; }
+    .feature-grid   { grid-template-columns: 1fr; }
+    .eco-card-inner { padding: 18px 14px 14px; }
+    .eco-icon-wrap  { font-size: 2.2em; }
+    .eco-text strong { font-size: 0.88em; }
+}
+
+/* ── Responsive: small phones (≤ 400px) ── */
+@media (max-width: 400px) {
+    .welcome-backdrop { padding: 0; align-items: flex-start; }
+    .welcome-modal  { border-radius: 0; max-height: 100vh; }
+    .welcome-hero   { border-radius: 0; padding: 20px 14px 16px; }
+    .welcome-title  { font-size: 1.45em; }
+    .welcome-tagline { font-size: 0.78em; }
+    .welcome-body   { padding: 16px 12px 20px; }
+    .welcome-intro  { font-size: 0.85em; }
+    .feature-card   { padding: 11px 11px; }
+    .eco-badges     { gap: 4px; }
+    .eco-badge      { font-size: 0.68em; padding: 3px 8px; }
+    .get-started-btn { font-size: 0.92em; padding: 11px 28px; }
+}
+
+/* ── Responsive: landscape phone (short viewport) ── */
+@media (max-height: 500px) and (orientation: landscape) {
+    .welcome-backdrop { align-items: flex-start; padding: 8px; }
+    .welcome-modal  { max-height: calc(100vh - 16px); }
+    .welcome-hero   { padding: 16px 24px 14px; }
+    .welcome-logo   { display: none; }
+    .welcome-title  { font-size: 1.4em; margin-bottom: 2px; }
+    .welcome-tagline { display: none; }
+    .welcome-body   { padding: 16px 24px 20px; }
+    .welcome-intro  { margin-bottom: 14px; }
+    .feature-grid   { gap: 8px; margin-bottom: 16px; }
+    .eco-card-inner { padding: 14px 16px 12px; flex-direction: row; text-align: left; }
+    .eco-icon-wrap  { font-size: 1.8em; }
+}
+
 /* Desktop: hide mobile controls */
 @media (min-width: 769px) {
     .mobile-menu-btn {
