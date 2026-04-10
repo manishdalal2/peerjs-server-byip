@@ -2,6 +2,39 @@ import express from "express";
 import type { IConfig } from "../../../config/index.ts";
 import type { IRealm } from "../../../models/realm.ts";
 
+function normalizeClientIp(ip: string): string {
+	const trimmedIp = ip.trim();
+
+	if (trimmedIp.startsWith("[") && trimmedIp.includes("]")) {
+		return trimmedIp.slice(1, trimmedIp.indexOf("]"));
+	}
+
+	const lastColonIndex = trimmedIp.lastIndexOf(":");
+	if (lastColonIndex !== -1) {
+		const maybePort = trimmedIp.slice(lastColonIndex + 1);
+		const beforeColon = trimmedIp.slice(0, lastColonIndex);
+
+		if (/^\d+$/.test(maybePort) && beforeColon.includes(".")) {
+			return beforeColon;
+		}
+	}
+
+	return trimmedIp;
+}
+
+function isGroupsEndpointAuthorized(req: express.Request): boolean {
+	const groupsToken = process.env["PEERJS_GROUPS_TOKEN"];
+
+	if (!groupsToken) {
+		return false;
+	}
+
+	const headerToken = req.header("x-peerjs-groups-token");
+	const queryToken = typeof req.query["token"] === "string" ? req.query["token"] : undefined;
+
+	return headerToken === groupsToken || queryToken === groupsToken;
+}
+
 export default ({
 	config,
 	realm,
@@ -41,9 +74,11 @@ export default ({
 					: forwardedFor;
 				const firstIp = forwardedIp.split(",")[0];
 				if (firstIp) {
-					clientIp = firstIp.trim();
+					clientIp = normalizeClientIp(firstIp);
 				}
 			}
+
+			clientIp = normalizeClientIp(clientIp);
 
 			const ipGroup = realm.getClientsByIp(clientIp);
 
@@ -63,7 +98,11 @@ export default ({
 	});
 
 	// Get all IP groups (admin/debugging endpoint)
-	app.get("/groups", (_, res: express.Response) => {
+	app.get("/groups", (req: express.Request, res: express.Response) => {
+		if (!isGroupsEndpointAuthorized(req)) {
+			return res.sendStatus(404);
+		}
+
 		if (config.allow_discovery) {
 			const result: Record<string, { id: string; alias: string }[]> = {};
 

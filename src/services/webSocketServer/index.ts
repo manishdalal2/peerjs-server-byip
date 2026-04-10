@@ -16,6 +16,26 @@ export interface IWebSocketServer extends EventEmitter {
 	readonly path: string;
 }
 
+function normalizeClientIp(ip: string): string {
+	const trimmedIp = ip.trim();
+
+	if (trimmedIp.startsWith("[") && trimmedIp.includes("]")) {
+		return trimmedIp.slice(1, trimmedIp.indexOf("]"));
+	}
+
+	const lastColonIndex = trimmedIp.lastIndexOf(":");
+	if (lastColonIndex !== -1) {
+		const maybePort = trimmedIp.slice(lastColonIndex + 1);
+		const beforeColon = trimmedIp.slice(0, lastColonIndex);
+
+		if (/^\d+$/.test(maybePort) && beforeColon.includes(".")) {
+			return beforeColon;
+		}
+	}
+
+	return trimmedIp;
+}
+
 type CustomConfig = Pick<
 	IConfig,
 	"path" | "key" | "concurrent_limit" | "createWebSocketServer"
@@ -81,9 +101,11 @@ export class WebSocketServer extends EventEmitter implements IWebSocketServer {
 				: forwardedFor;
 			const firstIp = forwardedIp.split(",")[0];
 			if (firstIp) {
-				ip = firstIp.trim();
+				ip = normalizeClientIp(firstIp);
 			}
 		}
+
+		ip = normalizeClientIp(ip);
 
 		// We are only interested in the query, the base url is therefore not relevant
 		const { searchParams } = new URL(req.url ?? "", "https://peerjs");
