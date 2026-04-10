@@ -4,9 +4,9 @@
 name: Build and deploy Node.js app to Azure Web App - localbytes
 
 on:
-  # push:
-  #   branches:
-  #     - master
+  push:
+    branches:
+      - master
   workflow_dispatch:
 
 jobs:
@@ -54,6 +54,12 @@ jobs:
           client-id: ${{ secrets.AZUREAPPSERVICE_CLIENTID_F96B0708AB6C41DDA252486203306292 }}
           tenant-id: ${{ secrets.AZUREAPPSERVICE_TENANTID_40E2918DBC1243538466E31C90ED06B1 }}
           subscription-id: ${{ secrets.AZUREAPPSERVICE_SUBSCRIPTIONID_25693D3A7B3441B993D599EC3348F8B6 }}
+
+      - name: 'Set startup command'
+        uses: azure/cli@v2
+        with:
+          inlineScript: |
+            az webapp config set --name 'localbytes' --resource-group '${{ secrets.AZURE_RESOURCE_GROUP }}' --startup-file 'npm start'
 
       - name: 'Deploy to Azure Web App'
         id: deploy-to-webapp

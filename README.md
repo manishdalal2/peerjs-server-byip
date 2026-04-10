@@ -1,19 +1,12 @@
-[![Build Status](https://travis-ci.org/peers/peerjs-server.png?branch=master)](https://travis-ci.org/peers/peerjs-server)
-![node](https://img.shields.io/node/v/peer)
-![David](https://img.shields.io/david/peers/peerjs-server)
-[![npm version](https://badge.fury.io/js/peer.svg)](https://www.npmjs.com/package/peer)
-[![Downloads](https://img.shields.io/npm/dm/peer.svg)](https://www.npmjs.com/package/peer)
-[![Docker Image Size (latest semver)](https://img.shields.io/docker/image-size/peerjs/peerjs-server)](https://hub.docker.com/r/peerjs/peerjs-server)
+![node](https://img.shields.io/node/v/peer-by-ip)
+[![npm version](https://badge.fury.io/js/peer-by-ip.svg)](https://www.npmjs.com/package/peer-by-ip)
+[![Downloads](https://img.shields.io/npm/dm/peer-by-ip.svg)](https://www.npmjs.com/package/peer-by-ip)
 
-# PeerServer: A server for PeerJS
+# PeerServer: A server for PeerJS (IP-Based Discovery Fork)
 
 PeerServer helps establishing connections between PeerJS clients. Data is not proxied through the server.
 
-Run your own server on Gitpod!
-
-[![Open in Gitpod](https://gitpod.io/button/open-in-gitpod.svg)](https://gitpod.io/#https://github.com/peers/peerjs-server)
-
-### [https://peerjs.com](https://peerjs.com)
+**This fork adds IP-based peer discovery**, allowing peers to only discover and connect with other peers on the same network/IP address.
 
 ## Usage
 
@@ -25,31 +18,17 @@ If you don't want to develop anything, just enter few commands below.
 
 1. Install the package globally:
    ```sh
-   $ npm install peer -g
+   $ npm install peer-by-ip -g
    ```
 2. Run the server:
 
    ```sh
    $ peerjs --port 9000 --key peerjs --path /myapp
 
-     Started PeerServer on ::, port: 9000, path: /myapp (v. 0.3.2)
+     Started PeerServer on ::, port: 9000, path: /myapp
    ```
 
 3. Check it: http://127.0.0.1:9000/myapp It should returns JSON with name, description and website fields.
-
-#### Docker
-
-Also, you can use Docker image to run a new container:
-
-```sh
-$ docker run -p 9000:9000 -d peerjs/peerjs-server
-```
-
-##### Kubernetes
-
-```sh
-$ kubectl run peerjs-server --image=peerjs/peerjs-server --port 9000 --expose -- --port 9000 --path /myapp
-```
 
 ### Create a custom server:
 
@@ -61,16 +40,16 @@ If you have your own server, you can attach PeerServer.
    # $ cd your-project-path
 
    # with npm
-   $ npm install peer
+   $ npm install peer-by-ip
 
    # with yarn
-   $ yarn add peer
+   $ yarn add peer-by-ip
    ```
 
 2. Use PeerServer object to create a new server:
 
    ```javascript
-   const { PeerServer } = require("peer");
+   const { PeerServer } = require("peer-by-ip");
 
    const peerServer = PeerServer({ port: 9000, path: "/myapp" });
    ```
@@ -183,7 +162,7 @@ Open http://127.0.0.1:9000/myapp/peerjs/id to see a new random id.
 
 ```javascript
 const express = require("express");
-const { ExpressPeerServer } = require("peer");
+const { ExpressPeerServer } = require("peer-by-ip");
 
 const app = express();
 
@@ -278,7 +257,7 @@ resources:
 
 ```js
 const express = require("express");
-const { ExpressPeerServer } = require("peer");
+const { ExpressPeerServer } = require("peer-by-ip");
 const app = express();
 
 app.enable("trust proxy");
@@ -307,11 +286,8 @@ gcloud app deploy --project=YOUR-PROJECT-ID-HERE --promote --quiet app.yaml
 
 ## Privacy
 
-See [PRIVACY.md](https://github.com/peers/peerjs-server/blob/master/PRIVACY.md)
+See [PRIVACY.md](./PRIVACY.md)
 
 ## Problems?
 
-Discuss PeerJS on our Discord community:
-https://discord.gg/Ud2PvAtK37
-
-Please post any bugs as a Github issue.
+Please post any bugs as a [Github issue](https://github.com/manishdalal2/peerjs-server-byip/issues).
