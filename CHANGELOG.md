@@ -1,3 +1,10 @@
+# [1.7.0](https://github.com/manishdalal2/peerjs-server-byip/compare/v1.6.0...v1.7.0) (2026-04-11)
+
+
+### Features
+
+* enhance UI components with improved button design and network illustrations ([3e355fb](https://github.com/manishdalal2/peerjs-server-byip/commit/3e355fbdc07e04288c7fa6f27a5efea463416078))
+
 # [1.6.0](https://github.com/manishdalal2/peerjs-server-byip/compare/v1.5.0...v1.6.0) (2026-04-11)
 
 
