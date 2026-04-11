@@ -21,4 +21,4 @@ npm-debug.log
 .cache
 .vscode
 .DS_Store
-public
+/public
