@@ -1,3 +1,10 @@
+# [1.5.0](https://github.com/manishdalal2/peerjs-server-byip/compare/v1.4.0...v1.5.0) (2026-04-11)
+
+
+### Features
+
+* remove exclusion of UI node_modules from artifact upload ([14eb29f](https://github.com/manishdalal2/peerjs-server-byip/commit/14eb29fa7394860fb2f9002a4d2b56debcdacbf2))
+
 # [1.4.0](https://github.com/manishdalal2/peerjs-server-byip/compare/v1.3.0...v1.4.0) (2026-04-11)
 
 
