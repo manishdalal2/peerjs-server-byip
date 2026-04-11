@@ -69,6 +69,9 @@
 		"coverage": "jest --coverage",
 		"start": "node server.js",
 		"dev": "nodemon --watch src -e ts --exec 'npm run build && npm run start'",
+		"ui:dev": "cd ui && npm run dev",
+		"ui:build": "cd ui && npm run build",
+		"ui:install": "cd ui && npm install",
 		"semantic-release": "semantic-release"
 	},
 	"dependencies": {

@@ -11,12 +11,12 @@ const port = process.env.PORT || 9000;
 
 const app = express();
 
-// Serve static files from the client folder (for assets like ring.mp3)
-app.use("/client", express.static(path.join(__dirname, "client")));
+// Serve the Vite build output (run `npm run ui:build` to generate)
+app.use(express.static(path.join(__dirname, "public")));
 
-// Serve index.html at the root so browsing to the site loads the client UI
+// SPA fallback — send index.html for any non-API route
 app.get("/", (_req, res) => {
-	res.sendFile(path.join(__dirname, "index.html"));
+	res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
 const server = http.createServer(app);
