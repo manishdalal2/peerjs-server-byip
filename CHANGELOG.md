@@ -1,3 +1,10 @@
+# [1.6.0](https://github.com/manishdalal2/peerjs-server-byip/compare/v1.5.0...v1.6.0) (2026-04-11)
+
+
+### Features
+
+* add public audio files for caller and ringtone ([e8e7c49](https://github.com/manishdalal2/peerjs-server-byip/commit/e8e7c498fff101da2eabce403d44f51096eccac1))
+
 # [1.5.0](https://github.com/manishdalal2/peerjs-server-byip/compare/v1.4.0...v1.5.0) (2026-04-11)
 
 
