@@ -37,9 +37,10 @@ const shortId = computed(() =>
         ></span>
       </button>
 
-      <h1 class="text-sm sm:text-base font-bold tracking-tight whitespace-nowrap">
-        🌐 Local Bytes
-      </h1>
+      <div class="flex flex-col leading-tight">
+        <h1 class="text-sm sm:text-base font-extrabold tracking-tight whitespace-nowrap">✈️ Share by Air</h1>
+        <span class="hidden sm:block text-[10px] opacity-70 whitespace-nowrap">Your data never leaves your hands.</span>
+      </div>
     </div>
 
     <div class="flex items-center gap-1.5 sm:gap-2.5 min-w-0 flex-1 justify-end">
@@ -62,8 +63,8 @@ const shortId = computed(() =>
         @click="$emit('open-about')"
         class="w-7 h-7 rounded-full border-2 border-white/60 bg-white/15 text-white text-sm font-bold
                hover:bg-white/30 hover:border-white/90 transition-colors flex items-center justify-center flex-shrink-0"
-        title="About Local Bytes"
-        aria-label="About Local Bytes"
+        title="About Share by Air"
+        aria-label="About Share by Air"
       >?</button>
 
       <!-- Buy me a coffee -->

@@ -33,9 +33,14 @@ export function usePeer() {
   }
 
   function attachRemoteAudio(stream) {
+    console.log('[Call] attachRemoteAudio — tracks:', stream.getAudioTracks().length, stream.getAudioTracks().map(t => t.label))
     callStore.remoteStream = stream
     const el = document.getElementById('remoteAudio')
-    if (el) { el.srcObject = stream; el.play().catch(() => {}) }
+    if (!el) { console.error('[Call] #remoteAudio element not found in DOM!'); return }
+    el.srcObject = stream
+    el.play()
+      .then(() => console.log('[Call] remoteAudio.play() ✓'))
+      .catch(err => console.error('[Call] remoteAudio.play() FAILED:', err.name, err.message))
   }
 
   // ── Wire audio MediaConnection ────────────────────────────────────────────
@@ -92,6 +97,7 @@ export function usePeer() {
       callStore.callState   = 'ringing-out'
       sendSignal({ type: 'call-request', callerName: peersStore.displayName || peersStore.myAlias })
       peersStore.setStatus(`Calling ${peersStore.connectedLabel}…`)
+      console.log('[Call] CALLER: ringing-out, calling startCallerTone()')
       startCallerTone()
       callTimeoutId = setTimeout(() => cancelCall(), RING_TIMEOUT_MS)
     } catch (err) {
@@ -101,6 +107,7 @@ export function usePeer() {
   }
 
   function _onCallAccepted() {
+    console.log('[Call] CALLER: call-accept received, placing WebRTC call')
     clearTimeout(callTimeoutId)
     stopAllCallAudio()
     wireAudioConn(peerInstance.call(connInstance.peer, callStore.localStream), callStore.localStream)
@@ -118,11 +125,15 @@ export function usePeer() {
     try {
       const stream = await getMic()
       callStore.localStream = stream
+      console.log('[Call] CALLEE: mic acquired, sending call-accept. pendingMediaConn:', !!pendingMediaConn)
       sendSignal({ type: 'call-accept' })
       if (pendingMediaConn) {
+        console.log('[Call] CALLEE: answering pendingMediaConn immediately')
         pendingMediaConn.answer(stream)
         wireAudioConn(pendingMediaConn, stream)
         pendingMediaConn = null
+      } else {
+        console.log('[Call] CALLEE: no pendingMediaConn yet — will answer when peer.on("call") fires')
       }
     } catch (err) {
       peersStore.setStatus('Microphone access denied: ' + (err.message || err))
@@ -225,6 +236,7 @@ export function usePeer() {
           callStore.callState  = 'ringing-in'
           callStore.callerName = msg.callerName || peersStore.connectedLabel || 'Someone'
           peersStore.setStatus(`Incoming call from ${callStore.callerName}`)
+          console.log('[Call] CALLEE: call-request received, calling startRingtone()')
           startRingtone()
           break
         case 'call-accept':
@@ -352,7 +364,9 @@ export function usePeer() {
       // If user already clicked Accept and mic is ready, answer immediately.
       // Check localStream (not callState==='in-call') because callState is still
       // 'ringing-in' until the stream arrives — a chicken-and-egg if we wait for it.
+      console.log('[Call] peer.on("call") — callState:', callStore.callState, 'localStream:', !!callStore.localStream)
       if (callStore.localStream && callStore.callState !== 'idle') {
+        console.log('[Call] CALLEE: answering mc in peer.on("call") (offer arrived after accept)')
         mc.answer(callStore.localStream)
         wireAudioConn(mc, callStore.localStream)
         pendingMediaConn = null

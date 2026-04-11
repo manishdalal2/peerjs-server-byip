@@ -1,7 +1,7 @@
 <script setup>
 import { ref, onMounted } from 'vue'
 
-const WELCOME_KEY = 'localBytesWelcomeSeen'
+const WELCOME_KEY = 'shareByAirWelcomeSeen'
 const visible     = ref(false)
 
 function show() { visible.value = true }
@@ -92,8 +92,8 @@ const ecoBadges = ['💧 No water wasted', '⚡ No idle electricity', '🗑️ N
                   <path d="M 25 25 L 50 75 M 75 25 L 50 75 M 25 25 L 75 25" stroke="rgba(255,255,255,0.5)" stroke-width="4" fill="none"/>
                 </svg>
               </div>
-              <h1 id="modal-title" class="text-2xl sm:text-3xl font-extrabold tracking-tight mb-1">Local Bytes</h1>
-              <p class="text-xs sm:text-sm opacity-80 uppercase tracking-widest">Private · Fast · Stays on your network</p>
+              <h1 id="modal-title" class="text-2xl sm:text-3xl font-extrabold tracking-tight mb-1">✈️ Share by Air</h1>
+              <p class="text-xs sm:text-sm opacity-90 tracking-wide">Your data never leaves your hands.</p>
             </div>
 
             <!-- ── Scrollable body ── -->

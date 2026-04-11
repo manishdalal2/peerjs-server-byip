@@ -89,18 +89,4 @@ onUnmounted(() => { destroy() })
   <CallBar />
   <ScreenShare />
 
-  <!-- One-shot message notification -->
-  <audio id="notificationSound" preload="auto">
-    <source src="/ring.mp3" type="audio/mpeg">
-  </audio>
-
-  <!-- Loops for the CALLEE while the call is ringing in -->
-  <audio id="ringtoneSound" loop preload="auto">
-    <source src="/ringtone.mp3" type="audio/mpeg">
-  </audio>
-
-  <!-- Loops for the CALLER while waiting for the callee to answer -->
-  <audio id="callerSound" loop preload="auto">
-    <source src="/caller.mp3" type="audio/mpeg">
-  </audio>
 </template>
