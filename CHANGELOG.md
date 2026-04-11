@@ -1,3 +1,12 @@
+# [1.3.0](https://github.com/manishdalal2/peerjs-server-byip/compare/v1.2.0...v1.3.0) (2026-04-11)
+
+
+### Features
+
+* add CallBar and IncomingCall components for managing audio calls ([14f7fc3](https://github.com/manishdalal2/peerjs-server-byip/commit/14f7fc3f05a63461d7ee6b33aa2ceb6811dfbde3))
+* add PeerList and WelcomeModal components for peer management and onboarding ([ec52b68](https://github.com/manishdalal2/peerjs-server-byip/commit/ec52b68c95fa7eb0eaeec0efe518e20ae35b3d61))
+* implement screen sharing functionality with UI components and state management ([2b3cfa2](https://github.com/manishdalal2/peerjs-server-byip/commit/2b3cfa297112fe471ac91a7c8e6427fd1a3585c6))
+
 # [1.2.0](https://github.com/manishdalal2/peerjs-server-byip/compare/v1.1.0...v1.2.0) (2026-04-10)
 
 
