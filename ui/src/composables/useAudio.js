@@ -10,14 +10,18 @@ function _stop(el)  { if (!el) return; el.pause(); el.currentTime = 0 }
 
 export function useAudio() {
   // ── Unlock autoplay policy ────────────────────────────────────────────────
+  // Prime ALL three elements — browsers sandbox autoplay per-element, so
+  // ringtoneSound and callerSound must each be touched during a user gesture
+  // or their .play() will fail silently when the call starts.
   function primeAudio() {
     if (audioReady) return
-    const el = getNotif()
-    if (!el) return
-    el.volume = 0
-    el.play()
-      .then(() => { el.pause(); el.currentTime = 0; el.volume = 1; audioReady = true })
-      .catch(() => {})
+    const els = [getNotif(), getRingtone(), getCaller()].filter(Boolean)
+    if (!els.length) return
+    els.forEach(el => {
+      el.volume = 0
+      el.play().then(() => { el.pause(); el.currentTime = 0; el.volume = 1 }).catch(() => {})
+    })
+    audioReady = true
   }
 
   // ── One-shot message ding ─────────────────────────────────────────────────

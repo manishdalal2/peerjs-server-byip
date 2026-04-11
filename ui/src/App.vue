@@ -46,7 +46,7 @@ onUnmounted(() => { destroy() })
     class="flex flex-col bg-slate-100 overflow-hidden"
     style="height: 100vh; height: calc(var(--vh, 1vh) * 100);"
   >
-    <AppHeader @open-about="openAbout" />
+    <AppHeader :sidebar-open="sidebarOpen" @open-about="openAbout" @toggle-sidebar="sidebarOpen = !sidebarOpen" />
 
     <div class="flex flex-1 overflow-hidden relative">
 
@@ -81,15 +81,6 @@ onUnmounted(() => { destroy() })
       {{ peersStore.statusText }}
     </div>
 
-    <!-- Mobile FAB (peer list toggle) -->
-    <button
-      class="fixed left-3 bottom-10 w-12 h-12 bg-indigo-500 hover:bg-indigo-600
-             text-white rounded-full shadow-xl flex items-center justify-center text-xl
-             lg:hidden z-20 transition active:scale-95"
-      :class="sidebarOpen ? 'bg-indigo-600' : ''"
-      @click="sidebarOpen = !sidebarOpen"
-      aria-label="Toggle peer list"
-    >👥</button>
   </div>
 
   <!-- Portalled overlays (outside the main layout so they don't affect flex) -->

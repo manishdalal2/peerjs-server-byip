@@ -134,10 +134,27 @@ async function send() {
       >
         <div
           v-if="!isConnected"
-          class="absolute inset-0 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center gap-3 z-10"
+          class="absolute inset-0 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center gap-4 z-10 px-8"
         >
-          <div class="text-4xl">👈</div>
-          <p class="text-slate-500 text-sm">Select a peer from the list to start</p>
+          <!-- network illustration -->
+          <svg class="w-20 h-20 text-indigo-200" viewBox="0 0 80 80" fill="none">
+            <circle cx="40" cy="40" r="39" stroke="currentColor" stroke-width="2" stroke-dasharray="6 4"/>
+            <circle cx="40" cy="40" r="8" fill="currentColor" class="text-indigo-300"/>
+            <circle cx="16" cy="26" r="6" fill="currentColor" class="text-indigo-200"/>
+            <circle cx="64" cy="26" r="6" fill="currentColor" class="text-indigo-200"/>
+            <circle cx="16" cy="54" r="6" fill="currentColor" class="text-indigo-200"/>
+            <circle cx="64" cy="54" r="6" fill="currentColor" class="text-indigo-200"/>
+            <line x1="34" y1="36" x2="22" y2="30" stroke="currentColor" stroke-width="1.5" class="text-indigo-300" stroke-linecap="round"/>
+            <line x1="46" y1="36" x2="58" y2="30" stroke="currentColor" stroke-width="1.5" class="text-indigo-300" stroke-linecap="round"/>
+            <line x1="34" y1="44" x2="22" y2="50" stroke="currentColor" stroke-width="1.5" class="text-indigo-300" stroke-linecap="round"/>
+            <line x1="46" y1="44" x2="58" y2="50" stroke="currentColor" stroke-width="1.5" class="text-indigo-300" stroke-linecap="round"/>
+          </svg>
+          <div class="text-center">
+            <p class="text-slate-700 font-semibold text-base mb-1">No peer connected</p>
+            <p class="text-slate-400 text-sm leading-relaxed">
+              Pick someone from the peer list<span class="lg:hidden"> — tap <strong>Peers</strong> below</span><span class="hidden lg:inline"> on the left</span> to start chatting
+            </p>
+          </div>
         </div>
       </Transition>
 

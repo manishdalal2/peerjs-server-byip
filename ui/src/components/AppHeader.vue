@@ -2,7 +2,8 @@
 import { computed } from 'vue'
 import { usePeersStore } from '../stores/peers.js'
 
-defineEmits(['open-about'])
+defineProps({ sidebarOpen: Boolean })
+defineEmits(['open-about', 'toggle-sidebar'])
 
 const peers = usePeersStore()
 const shortId = computed(() =>
@@ -13,11 +14,35 @@ const shortId = computed(() =>
 <template>
   <header class="bg-gradient-to-r from-indigo-500 to-purple-600 text-white px-3 sm:px-5 h-14 flex items-center justify-between shadow-lg flex-shrink-0 gap-2">
 
-    <h1 class="text-sm sm:text-base font-bold tracking-tight whitespace-nowrap">
-      🌐 Local Bytes
-    </h1>
+    <div class="flex items-center gap-2">
+      <!-- Hamburger — mobile only, opens peer list sidebar -->
+      <button
+        @click="$emit('toggle-sidebar')"
+        class="lg:hidden w-9 h-9 rounded-lg flex flex-col items-center justify-center gap-1.5
+               hover:bg-white/15 active:bg-white/25 transition-colors flex-shrink-0"
+        :class="sidebarOpen ? 'bg-white/20' : ''"
+        aria-label="Toggle peer list"
+      >
+        <span
+          class="block w-5 h-0.5 bg-white rounded-full transition-all duration-200"
+          :class="sidebarOpen ? 'rotate-45 translate-y-2' : ''"
+        ></span>
+        <span
+          class="block w-5 h-0.5 bg-white rounded-full transition-all duration-200"
+          :class="sidebarOpen ? 'opacity-0' : ''"
+        ></span>
+        <span
+          class="block w-5 h-0.5 bg-white rounded-full transition-all duration-200"
+          :class="sidebarOpen ? '-rotate-45 -translate-y-2' : ''"
+        ></span>
+      </button>
 
-    <div class="flex items-center gap-1.5 sm:gap-2.5 min-w-0">
+      <h1 class="text-sm sm:text-base font-bold tracking-tight whitespace-nowrap">
+        🌐 Local Bytes
+      </h1>
+    </div>
+
+    <div class="flex items-center gap-1.5 sm:gap-2.5 min-w-0 flex-1 justify-end">
       <!-- Peer ID badge — hidden on very small screens -->
       <span class="hidden sm:block text-xs bg-white/15 px-3 py-1 rounded-full font-mono whitespace-nowrap">
         ID: {{ shortId }}

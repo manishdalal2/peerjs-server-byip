@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch } from 'vue'
+import { ref, computed, watch, nextTick } from 'vue'
 import { useCallStore }  from '../stores/call.js'
 import { usePeersStore } from '../stores/peers.js'
 import { usePeer }       from '../composables/usePeer.js'
@@ -13,18 +13,35 @@ const viewerVideoEl = ref(null)   // viewer's received stream
 
 const visible = computed(() => callStore.isSharingScreen || callStore.isViewingScreen)
 
-// Attach sharer's own screen stream when it starts
+// Attach sharer's own screen stream.
+// flush:'post' ensures the watch runs after the DOM has updated (v-if mounted),
+// because Vue batches screenStream + isSharingScreen assignments together.
 watch(() => callStore.screenStream, stream => {
   if (sharerVideoEl.value && stream) {
     sharerVideoEl.value.srcObject = stream
     sharerVideoEl.value.play().catch(() => {})
   }
-})
+}, { flush: 'post' })
 
 // Attach remote screen stream when it arrives (viewer side)
 watch(() => callStore.remoteScreenStream, stream => {
   if (viewerVideoEl.value && stream) {
     viewerVideoEl.value.srcObject = stream
+    viewerVideoEl.value.play().catch(() => {})
+  }
+}, { flush: 'post' })
+
+// Safety net: if the overlay becomes visible and a stream is already set
+// (e.g. viewer reopens the overlay after hiding it), re-attach.
+watch(visible, async v => {
+  if (!v) return
+  await nextTick()
+  if (sharerVideoEl.value && callStore.screenStream) {
+    sharerVideoEl.value.srcObject = callStore.screenStream
+    sharerVideoEl.value.play().catch(() => {})
+  }
+  if (viewerVideoEl.value && callStore.remoteScreenStream) {
+    viewerVideoEl.value.srcObject = callStore.remoteScreenStream
     viewerVideoEl.value.play().catch(() => {})
   }
 })

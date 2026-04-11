@@ -349,8 +349,10 @@ export function usePeer() {
       // ── Audio call ───────────────────────────────────────────────────────
       pendingMediaConn = mc
 
-      // If user already clicked Accept and has their mic ready, answer now
-      if (callStore.callState === 'in-call' && callStore.localStream) {
+      // If user already clicked Accept and mic is ready, answer immediately.
+      // Check localStream (not callState==='in-call') because callState is still
+      // 'ringing-in' until the stream arrives — a chicken-and-egg if we wait for it.
+      if (callStore.localStream && callStore.callState !== 'idle') {
         mc.answer(callStore.localStream)
         wireAudioConn(mc, callStore.localStream)
         pendingMediaConn = null
@@ -359,7 +361,7 @@ export function usePeer() {
 
       if (callStore.callState === 'idle') { mc.close(); pendingMediaConn = null; return }
 
-      // callState === 'ringing-in' — acceptCall() will answer when user clicks Accept
+      // callState === 'ringing-in', mic not acquired yet — acceptCall() will answer
       mc.on('close', () => { if (callStore.callState !== 'idle') _cleanupCall('Call ended') })
       mc.on('error', () => _cleanupCall('Call error'))
     })
