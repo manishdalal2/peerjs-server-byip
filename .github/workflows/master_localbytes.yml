@@ -38,8 +38,6 @@ jobs:
         with:
           name: node-app
           path: .
-          exclude: |
-            ui/node_modules/**
 
   deploy:
     runs-on: ubuntu-latest
