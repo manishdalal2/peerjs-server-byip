@@ -9,7 +9,7 @@ import { fmtBytes }       from '../stores/messages.js'
 const peersStore = usePeersStore()
 const msgsStore  = useMessagesStore()
 const callStore  = useCallStore()
-const { sendText, sendFile, startCall } = usePeer()
+const { sendText, sendFile, startCall, startScreenShare, stopScreenShare } = usePeer()
 
 const msgInput   = ref('')
 const fileInput  = ref(null)
@@ -17,8 +17,10 @@ const stagedFile = ref(null)
 const chatEl     = ref(null)
 const sending    = ref(false)
 
-const isConnected  = computed(() => !!peersStore.connectedId)
-const canCall      = computed(() => isConnected.value && callStore.callState === 'idle')
+const isConnected   = computed(() => !!peersStore.connectedId)
+const canCall       = computed(() => isConnected.value && callStore.callState === 'idle')
+const canScreen     = computed(() => isConnected.value && !callStore.isSharingScreen && !callStore.isViewingScreen)
+const isSharingNow  = computed(() => callStore.isSharingScreen)
 
 // Auto-scroll on new messages
 watch(() => msgsStore.messages.length, async () => {
@@ -91,6 +93,30 @@ async function send() {
         >
           <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
             <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/>
+          </svg>
+        </button>
+      </Transition>
+
+      <!-- Screen share button -->
+      <Transition
+        enter-active-class="transition-all duration-200"
+        enter-from-class="opacity-0 scale-75"
+        enter-to-class="opacity-100 scale-100"
+        leave-active-class="transition-all duration-150"
+        leave-to-class="opacity-0 scale-75"
+      >
+        <button
+          v-if="canScreen || isSharingNow"
+          @click="isSharingNow ? stopScreenShare() : startScreenShare()"
+          :title="isSharingNow ? 'Stop screen share' : 'Share your screen'"
+          :aria-label="isSharingNow ? 'Stop screen share' : 'Share your screen'"
+          class="w-8 h-8 flex-shrink-0 rounded-full text-white flex items-center justify-center transition-colors shadow-sm"
+          :class="isSharingNow
+            ? 'bg-red-500 hover:bg-red-600 active:bg-red-700'
+            : 'bg-indigo-500 hover:bg-indigo-600 active:bg-indigo-700'"
+        >
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M20 3H4c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h6v2H8v2h8v-2h-2v-2h6c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 13H4V5h16v11z"/>
           </svg>
         </button>
       </Transition>

@@ -6,6 +6,7 @@ import ChatPanel    from './components/ChatPanel.vue'
 import WelcomeModal from './components/WelcomeModal.vue'
 import CallBar      from './components/CallBar.vue'
 import IncomingCall from './components/IncomingCall.vue'
+import ScreenShare  from './components/ScreenShare.vue'
 import { usePeersStore } from './stores/peers.js'
 import { usePeer }       from './composables/usePeer.js'
 import { useAudio }      from './composables/useAudio.js'
@@ -95,6 +96,7 @@ onUnmounted(() => { destroy() })
   <WelcomeModal ref="welcomeModal" />
   <IncomingCall />
   <CallBar />
+  <ScreenShare />
 
   <!-- One-shot message notification -->
   <audio id="notificationSound" preload="auto">

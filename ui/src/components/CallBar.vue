@@ -6,7 +6,7 @@ import { usePeer }       from '../composables/usePeer.js'
 
 const callStore  = useCallStore()
 const peersStore = usePeersStore()
-const { cancelCall, endCall, toggleMute } = usePeer()
+const { cancelCall, endCall, toggleMute, startScreenShare, stopScreenShare } = usePeer()
 
 const remoteAudioEl = ref(null)
 
@@ -66,6 +66,21 @@ const peerName     = computed(() => peersStore.connectedLabel || 'Peer')
 
           <!-- Controls -->
           <div class="flex items-center gap-2 flex-shrink-0">
+            <!-- Screen share toggle (only while in call) -->
+            <button
+              v-if="isInCall"
+              @click="callStore.isSharingScreen ? stopScreenShare() : startScreenShare()"
+              :title="callStore.isSharingScreen ? 'Stop sharing' : 'Share screen'"
+              class="w-10 h-10 rounded-full flex items-center justify-center transition-colors"
+              :class="callStore.isSharingScreen
+                ? 'bg-indigo-500/80 text-white hover:bg-indigo-600'
+                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'"
+            >
+              <svg class="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M20 3H4c-1.1 0-2 .9-2 2v11c0 1.1.9 2 2 2h6v2H8v2h8v-2h-2v-2h6c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 13H4V5h16v11z"/>
+              </svg>
+            </button>
+
             <!-- Mute (only while in call) -->
             <button
               v-if="isInCall"

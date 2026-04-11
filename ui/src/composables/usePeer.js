@@ -1,26 +1,27 @@
 import Peer from 'peerjs'
-import { usePeersStore }   from '../stores/peers.js'
+import { usePeersStore }    from '../stores/peers.js'
 import { useMessagesStore } from '../stores/messages.js'
-import { useCallStore }    from '../stores/call.js'
-import { useAudio }        from './useAudio.js'
+import { useCallStore }     from '../stores/call.js'
+import { useAudio }         from './useAudio.js'
 
 // ── Module-level singletons ───────────────────────────────────────────────────
-let peerInstance    = null
-let connInstance    = null   // DataConnection (chat / file / call-signalling)
-let callMediaConn   = null   // MediaConnection (live audio)
-let pendingMediaConn = null  // MediaConnection received before user clicked Accept
-let callTimeoutId   = null   // auto-cancel if callee never answers
+let peerInstance     = null
+let connInstance     = null   // DataConnection  (chat / file / call-signalling)
+let callMediaConn    = null   // MediaConnection (audio call)
+let screenMediaConn  = null   // MediaConnection (screen share)
+let pendingMediaConn = null   // incoming audio call waiting for user to Accept
+let callTimeoutId    = null
 
-const CHUNK_SIZE = 16 * 1024
-const BUF_HIGH   = 1 * 1024 * 1024
-const BUF_LOW    = 256 * 1024
-const RING_TIMEOUT_MS = 45_000   // auto-cancel outgoing call after 45 s
+const CHUNK_SIZE      = 16 * 1024
+const BUF_HIGH        = 1 * 1024 * 1024
+const BUF_LOW         = 256 * 1024
+const RING_TIMEOUT_MS = 45_000
 
 export function usePeer() {
   const peersStore = usePeersStore()
   const msgsStore  = useMessagesStore()
   const callStore  = useCallStore()
-  const { primeAudio, playNotification, startRingtone, stopRingtone, startCallerTone, stopAllCallAudio } = useAudio()
+  const { primeAudio, playNotification, startRingtone, startCallerTone, stopAllCallAudio } = useAudio()
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   function sendSignal(payload) {
@@ -31,65 +32,67 @@ export function usePeer() {
     return navigator.mediaDevices.getUserMedia({ audio: true, video: false })
   }
 
-  // ── Attach remote stream to the hidden <audio> element ────────────────────
-  function attachRemoteStream(stream) {
+  function attachRemoteAudio(stream) {
     callStore.remoteStream = stream
     const el = document.getElementById('remoteAudio')
     if (el) { el.srcObject = stream; el.play().catch(() => {}) }
   }
 
-  // ── Wire a MediaConnection (both outgoing and incoming) ───────────────────
-  function wireMediaConn(mc, localStream) {
+  // ── Wire audio MediaConnection ────────────────────────────────────────────
+  function wireAudioConn(mc, localStream) {
     callMediaConn = mc
 
     mc.on('stream', remoteStream => {
-      attachRemoteStream(remoteStream)
+      attachRemoteAudio(remoteStream)
       callStore.callState = 'in-call'
       callStore.startTimer()
       peersStore.setStatus(`In call with ${peersStore.connectedLabel}`)
     })
 
-    mc.on('close', () => {
-      _cleanupCall('Call ended')
-    })
-
-    mc.on('error', err => {
-      _cleanupCall('Call error: ' + (err.message || err))
-    })
+    mc.on('close', () => _cleanupCall('Call ended'))
+    mc.on('error', () => _cleanupCall('Call error'))
   }
 
-  function _cleanupCall(statusMsg = 'Call ended') {
-    callMediaConn?.close()
-    callMediaConn    = null
+  function _cleanupCall(msg = 'Call ended') {
+    callMediaConn?.close();  callMediaConn    = null
     pendingMediaConn = null
     clearTimeout(callTimeoutId)
-    stopAllCallAudio()   // stops both ringtone.mp3 and caller.mp3
+    stopAllCallAudio()
     callStore.reset()
-    peersStore.setStatus(statusMsg)
+    peersStore.setStatus(msg)
   }
 
-  // ── Outgoing call — step 1: signal the callee, get mic ────────────────────
-  async function startCall() {
-    if (!connInstance?.open) {
-      peersStore.setStatus('Connect to a peer before calling')
-      return
-    }
-    if (callStore.callState !== 'idle') return
+  // ── Wire screen-share MediaConnection (receiver side) ─────────────────────
+  function wireScreenRecv(mc) {
+    screenMediaConn = mc
 
+    mc.on('stream', stream => {
+      callStore.remoteScreenStream = stream
+      callStore.isViewingScreen    = true
+      peersStore.setStatus(`Viewing ${peersStore.connectedLabel}'s screen`)
+    })
+
+    mc.on('close', () => {
+      callStore.resetScreen()
+      peersStore.setStatus('Screen share ended')
+    })
+
+    mc.on('error', () => {
+      callStore.resetScreen()
+    })
+  }
+
+  // ── Audio call — outgoing ─────────────────────────────────────────────────
+  async function startCall() {
+    if (!connInstance?.open) { peersStore.setStatus('Connect to a peer before calling'); return }
+    if (callStore.callState !== 'idle') return
     try {
       const stream = await getMic()
       callStore.localStream = stream
       callStore.callState   = 'ringing-out'
-
-      sendSignal({
-        type:       'call-request',
-        callerName: peersStore.displayName || peersStore.myAlias || peersStore.myPeerId?.slice(0, 8),
-      })
-
+      sendSignal({ type: 'call-request', callerName: peersStore.displayName || peersStore.myAlias })
       peersStore.setStatus(`Calling ${peersStore.connectedLabel}…`)
-      startCallerTone()   // caller hears caller.mp3 while waiting
-
-      // Auto-cancel if unanswered
+      startCallerTone()
       callTimeoutId = setTimeout(() => cancelCall(), RING_TIMEOUT_MS)
     } catch (err) {
       peersStore.setStatus('Microphone access denied: ' + (err.message || err))
@@ -97,70 +100,101 @@ export function usePeer() {
     }
   }
 
-  // ── Outgoing call — step 3: callee accepted, initiate WebRTC media ────────
   function _onCallAccepted() {
     clearTimeout(callTimeoutId)
-    stopAllCallAudio()   // stop caller.mp3 — call is connecting
-    // peer.call() triggers peer.on('call') on the callee
-    const mc = peerInstance.call(connInstance.peer, callStore.localStream)
-    wireMediaConn(mc, callStore.localStream)
+    stopAllCallAudio()
+    wireAudioConn(peerInstance.call(connInstance.peer, callStore.localStream), callStore.localStream)
   }
 
-  // ── Cancel outgoing call while it's ringing ───────────────────────────────
   function cancelCall() {
     if (callStore.callState !== 'ringing-out') return
     sendSignal({ type: 'call-cancel' })
     _cleanupCall('Call cancelled')
   }
 
-  // ── Callee accepts the incoming call ─────────────────────────────────────
   async function acceptCall() {
     if (callStore.callState !== 'ringing-in') return
     stopAllCallAudio()
-
     try {
       const stream = await getMic()
       callStore.localStream = stream
-
-      // Tell caller to initiate the WebRTC media connection
       sendSignal({ type: 'call-accept' })
-
-      // peer.on('call') may have already fired (pendingMediaConn) or will fire shortly
       if (pendingMediaConn) {
         pendingMediaConn.answer(stream)
-        wireMediaConn(pendingMediaConn, stream)
+        wireAudioConn(pendingMediaConn, stream)
         pendingMediaConn = null
       }
-      // If pendingMediaConn is still null, peer.on('call') will arrive after the
-      // caller processes 'call-accept' — handled in the init() peer.on('call') handler
     } catch (err) {
       peersStore.setStatus('Microphone access denied: ' + (err.message || err))
       rejectCall()
     }
   }
 
-  // ── Callee rejects the incoming call ─────────────────────────────────────
   function rejectCall() {
     if (callStore.callState !== 'ringing-in') return
     sendSignal({ type: 'call-reject' })
     _cleanupCall('Call declined')
   }
 
-  // ── Either party ends an active call ─────────────────────────────────────
   function endCall() {
     sendSignal({ type: 'call-end' })
     _cleanupCall('Call ended')
   }
 
-  // ── Toggle microphone mute ────────────────────────────────────────────────
   function toggleMute() {
     const track = callStore.localStream?.getAudioTracks()[0]
     if (!track) return
-    track.enabled     = !track.enabled
+    track.enabled  = !track.enabled
     callStore.isMuted = !track.enabled
   }
 
-  // ── Wire a DataConnection ─────────────────────────────────────────────────
+  // ── Screen share — start (sharer side) ───────────────────────────────────
+  async function startScreenShare() {
+    if (!connInstance?.open) { peersStore.setStatus('Connect to a peer before sharing'); return }
+    if (callStore.isSharingScreen) return
+
+    try {
+      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
+      callStore.screenStream    = stream
+      callStore.isSharingScreen = true
+
+      // Signal receiver so their UI can prepare
+      sendSignal({ type: 'screen-share-start', sharerName: peersStore.displayName || peersStore.myAlias })
+
+      // Call peer with screen stream — metadata.type = 'screen' distinguishes from audio
+      screenMediaConn = peerInstance.call(connInstance.peer, stream, {
+        metadata: { type: 'screen' },
+      })
+
+      screenMediaConn.on('close',  () => _cleanupScreenShare())
+      screenMediaConn.on('error',  () => _cleanupScreenShare())
+
+      // Handle the browser's native "Stop sharing" button
+      stream.getVideoTracks()[0].onended = () => stopScreenShare()
+
+      peersStore.setStatus('Sharing your screen…')
+    } catch (err) {
+      if (err.name !== 'NotAllowedError') {
+        peersStore.setStatus('Screen share failed: ' + (err.message || err))
+      }
+      callStore.resetScreen()
+    }
+  }
+
+  // ── Screen share — stop (sharer side) ────────────────────────────────────
+  function stopScreenShare() {
+    if (!callStore.isSharingScreen) return
+    sendSignal({ type: 'screen-share-end' })
+    _cleanupScreenShare()
+  }
+
+  function _cleanupScreenShare(msg = 'Screen share ended') {
+    screenMediaConn?.close(); screenMediaConn = null
+    callStore.resetScreen()
+    peersStore.setStatus(msg)
+  }
+
+  // ── DataConnection ────────────────────────────────────────────────────────
   function wireConn(c) {
     connInstance = c
 
@@ -171,63 +205,55 @@ export function usePeer() {
     })
 
     c.on('data', data => {
-      // Binary = file chunk
       if (data instanceof ArrayBuffer) { msgsStore.onChunk(data); return }
-
       if (typeof data !== 'string') return
       let msg
       try { msg = JSON.parse(data) } catch { return }
 
       switch (msg.type) {
-        // ── Chat / file ────────────────────────────────────────────────────
+        // ── Chat / file ──────────────────────────────────────────────────
         case 'chat':
-          msgsStore.addRemoteText(msg.text)
-          playNotification()
-          break
+          msgsStore.addRemoteText(msg.text); playNotification(); break
         case 'file-start':
-          msgsStore.onFileStart(msg)
-          playNotification()
-          break
+          msgsStore.onFileStart(msg); playNotification(); break
         case 'file-end':
-          msgsStore.onFileEnd()
-          break
+          msgsStore.onFileEnd(); break
 
-        // ── Call signalling ────────────────────────────────────────────────
+        // ── Audio call signalling ────────────────────────────────────────
         case 'call-request':
-          if (callStore.callState !== 'idle') {
-            // Already in a call — auto-reject
-            sendSignal({ type: 'call-reject' })
-            break
-          }
+          if (callStore.callState !== 'idle') { sendSignal({ type: 'call-reject' }); break }
           callStore.callState  = 'ringing-in'
           callStore.callerName = msg.callerName || peersStore.connectedLabel || 'Someone'
           peersStore.setStatus(`Incoming call from ${callStore.callerName}`)
           startRingtone()
           break
-
         case 'call-accept':
-          if (callStore.callState === 'ringing-out') _onCallAccepted()
-          break
-
+          if (callStore.callState === 'ringing-out') _onCallAccepted(); break
         case 'call-reject':
-          if (callStore.callState === 'ringing-out') _cleanupCall('Call declined')
-          break
-
+          if (callStore.callState === 'ringing-out') _cleanupCall('Call declined'); break
         case 'call-cancel':
-          if (callStore.callState === 'ringing-in') {
-            stopRingtone()
-            _cleanupCall('Caller cancelled')
-          }
-          break
-
+          if (callStore.callState === 'ringing-in') { stopAllCallAudio(); _cleanupCall('Caller cancelled') } break
         case 'call-end':
-          if (callStore.callState === 'in-call') _cleanupCall('Call ended by peer')
+          if (callStore.callState === 'in-call') _cleanupCall('Call ended by peer'); break
+
+        // ── Screen share signalling ──────────────────────────────────────
+        case 'screen-share-start':
+          // Receiver UI will react to isViewingScreen becoming true via peer.on('call')
+          callStore.isViewingScreen = false  // reset; will be set true when stream arrives
+          peersStore.setStatus(`${msg.sharerName || peersStore.connectedLabel} is sharing their screen…`)
+          break
+        case 'screen-share-end':
+          if (callStore.isViewingScreen) {
+            callStore.resetScreen()
+            peersStore.setStatus('Screen share ended')
+          }
           break
       }
     })
 
     c.on('close', () => {
       if (callStore.callState !== 'idle') _cleanupCall('Peer disconnected')
+      if (callStore.isSharingScreen || callStore.isViewingScreen) _cleanupScreenShare('Peer disconnected')
       peersStore.setPeerDisconnected()
       peersStore.setStatus('Peer disconnected')
     })
@@ -235,7 +261,7 @@ export function usePeer() {
     c.on('error', err => peersStore.setStatus('Connection error: ' + err))
   }
 
-  // ── IP-group WebSocket interception ───────────────────────────────────────
+  // ── PeerJS bootstrap ──────────────────────────────────────────────────────
   function listenForIPGroupEvents() {
     if (!peerInstance?.socket?._socket) { setTimeout(listenForIPGroupEvents, 400); return }
     const ws = peerInstance.socket._socket, orig = ws.onmessage
@@ -245,23 +271,16 @@ export function usePeer() {
     }
   }
 
-  // ── Profile update ────────────────────────────────────────────────────────
   function sendProfileUpdate() {
     const ws = peerInstance?.socket?._socket ?? null
-    if (!ws || ws.readyState !== WebSocket.OPEN) {
-      peersStore.setStatus('Profile will sync once connected'); return
-    }
-    ws.send(JSON.stringify({
-      type: 'SET-PEER-PROFILE',
-      payload: { name: peersStore.displayName, pin: peersStore.pin },
-    }))
+    if (!ws || ws.readyState !== WebSocket.OPEN) { peersStore.setStatus('Profile will sync once connected'); return }
+    ws.send(JSON.stringify({ type: 'SET-PEER-PROFILE', payload: { name: peersStore.displayName, pin: peersStore.pin } }))
     localStorage.setItem('peerProfileName', peersStore.displayName)
     localStorage.setItem('peerProfilePin',  peersStore.pin)
     peersStore.myAlias = peersStore.displayName || peersStore.myAlias
     peersStore.setStatus('Profile updated')
   }
 
-  // ── Connect to a peer by ID ───────────────────────────────────────────────
   function connectTo(peerId, alias, hasPin) {
     if (peerId === peersStore.myPeerId) { peersStore.setStatus('Cannot connect to yourself!'); return }
     if (connInstance) connInstance.close()
@@ -269,20 +288,15 @@ export function usePeer() {
     const pin = hasPin ? window.prompt(`Enter PIN for ${alias || peerId}`) : ''
     if (hasPin && pin === null) { peersStore.setStatus('Connection cancelled'); return }
     peersStore.setStatus(`Connecting to ${alias || peerId}…`)
-    wireConn(peerInstance.connect(peerId, {
-      reliable: true, serialization: 'raw',
-      metadata: pin ? { pin: pin.trim() } : undefined,
-    }))
+    wireConn(peerInstance.connect(peerId, { reliable: true, serialization: 'raw', metadata: pin ? { pin: pin.trim() } : undefined }))
   }
 
-  // ── Send text ─────────────────────────────────────────────────────────────
   function sendText(text) {
     if (!connInstance?.open) return
     connInstance.send(JSON.stringify({ type: 'chat', text }))
     msgsStore.addLocalText(text)
   }
 
-  // ── Send file with backpressure ───────────────────────────────────────────
   async function sendFile(file) {
     if (!connInstance?.open) return
     const msgId = msgsStore.addLocalFile(file.name, file.size)
@@ -293,11 +307,9 @@ export function usePeer() {
     while (offset < file.size) {
       const end = Math.min(offset + CHUNK_SIZE, file.size)
       const buf = await file.slice(offset, end).arrayBuffer()
-      if (dc && dc.bufferedAmount > BUF_HIGH) {
+      if (dc && dc.bufferedAmount > BUF_HIGH)
         await new Promise(r => dc.addEventListener('bufferedamountlow', r, { once: true }))
-      }
-      connInstance.send(buf)
-      offset = end
+      connInstance.send(buf); offset = end
       msgsStore.updateFileProgress(msgId, Math.round((offset / file.size) * 100))
       await new Promise(r => setTimeout(r, 0))
     }
@@ -306,15 +318,13 @@ export function usePeer() {
     peersStore.setStatus(`Sent: ${file.name}`)
   }
 
-  // ── PeerJS bootstrap ──────────────────────────────────────────────────────
   function init() {
-    if (peerInstance) return  // guard HMR double-init
+    if (peerInstance) return
 
-    const host   = window.location.hostname
-    const port   = Number(window.location.port) || (window.location.protocol === 'https:' ? 443 : 80)
-    const secure = window.location.protocol === 'https:'
+    const host = window.location.hostname
+    const port = Number(window.location.port) || (window.location.protocol === 'https:' ? 443 : 80)
 
-    peerInstance = new Peer({ host, port, path: '/', key: 'peerjs', secure,
+    peerInstance = new Peer({ host, port, path: '/', key: 'peerjs', secure: window.location.protocol === 'https:',
       config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] } })
 
     peerInstance.on('open', id => {
@@ -326,25 +336,32 @@ export function usePeer() {
 
     peerInstance.on('connection', c => { primeAudio(); wireConn(c); peersStore.setStatus(`Incoming connection from ${c.peer}`) })
 
-    // ── Incoming WebRTC media connection (caller called peer.call()) ──────────
+    // ── Incoming media connection — route by metadata.type ─────────────────
     peerInstance.on('call', mc => {
-      pendingMediaConn = mc  // store it; will be answered in acceptCall() if not already
+      // ── Screen share (auto-answer, no local stream needed) ──────────────
+      if (mc.metadata?.type === 'screen') {
+        mc.answer()          // receive-only; send nothing back
+        wireScreenRecv(mc)
+        screenMediaConn = mc
+        return
+      }
 
-      // If user already clicked Accept and got their mic, answer immediately
+      // ── Audio call ───────────────────────────────────────────────────────
+      pendingMediaConn = mc
+
+      // If user already clicked Accept and has their mic ready, answer now
       if (callStore.callState === 'in-call' && callStore.localStream) {
         mc.answer(callStore.localStream)
-        wireMediaConn(mc, callStore.localStream)
+        wireAudioConn(mc, callStore.localStream)
         pendingMediaConn = null
         return
       }
 
-      // Defensive: if we somehow get a media conn without ringing-in state, close it
       if (callStore.callState === 'idle') { mc.close(); pendingMediaConn = null; return }
 
-      // callState === 'ringing-in' and user hasn't clicked Accept yet
-      // pendingMediaConn stays set — acceptCall() will answer it
+      // callState === 'ringing-in' — acceptCall() will answer when user clicks Accept
       mc.on('close', () => { if (callStore.callState !== 'idle') _cleanupCall('Call ended') })
-      mc.on('error', () => { _cleanupCall('Call error') })
+      mc.on('error', () => _cleanupCall('Call error'))
     })
 
     peerInstance.on('disconnected', () => {
@@ -352,13 +369,12 @@ export function usePeer() {
       peersStore.setStatus('Disconnected — reconnecting…')
       peerInstance.reconnect()
     })
-
     peerInstance.on('close', () => { peersStore.serverConnected = false; peersStore.setPeerDisconnected() })
     peerInstance.on('error', err => { peersStore.serverConnected = false; peersStore.setStatus('Error: ' + (err.type || err)) })
   }
 
   function destroy() {
-    _cleanupCall()
+    _cleanupCall(); _cleanupScreenShare()
     connInstance?.close(); peerInstance?.destroy()
     peerInstance = null; connInstance = null
   }
@@ -367,5 +383,6 @@ export function usePeer() {
     init, destroy,
     connectTo, sendText, sendFile, sendProfileUpdate,
     startCall, cancelCall, acceptCall, rejectCall, endCall, toggleMute,
+    startScreenShare, stopScreenShare,
   }
 }
