@@ -1,3 +1,10 @@
+# [1.4.0](https://github.com/manishdalal2/peerjs-server-byip/compare/v1.3.0...v1.4.0) (2026-04-11)
+
+
+### Features
+
+* add UI installation and build steps to GitHub Actions workflow ([50819a0](https://github.com/manishdalal2/peerjs-server-byip/commit/50819a0e09b7c22faed42e3b7e68f044b637d325))
+
 # [1.3.0](https://github.com/manishdalal2/peerjs-server-byip/compare/v1.2.0...v1.3.0) (2026-04-11)
 
 
