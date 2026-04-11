@@ -4,6 +4,8 @@ import AppHeader    from './components/AppHeader.vue'
 import PeerList     from './components/PeerList.vue'
 import ChatPanel    from './components/ChatPanel.vue'
 import WelcomeModal from './components/WelcomeModal.vue'
+import CallBar      from './components/CallBar.vue'
+import IncomingCall from './components/IncomingCall.vue'
 import { usePeersStore } from './stores/peers.js'
 import { usePeer }       from './composables/usePeer.js'
 import { useAudio }      from './composables/useAudio.js'
@@ -15,20 +17,19 @@ const { primeAudio }    = useAudio()
 const welcomeModal = ref(null)
 const sidebarOpen  = ref(false)
 
-function openAbout() { welcomeModal.value?.show() }
-
+function openAbout()    { welcomeModal.value?.show() }
 function closeSidebar() { sidebarOpen.value = false }
 
 onMounted(() => {
   init()
 
-  // Prime audio on any user gesture — keep listening until it succeeds
+  // Keep retrying audio unlock on every user gesture until it succeeds
   const prime = () => primeAudio()
   document.addEventListener('click',      prime, { passive: true })
   document.addEventListener('keydown',    prime, { passive: true })
   document.addEventListener('touchstart', prime, { passive: true })
 
-  // Fix 100vh on iOS Safari (address-bar changes viewport height)
+  // Fix 100vh on iOS Safari (address bar shrinks the viewport)
   function setVh() {
     document.documentElement.style.setProperty('--vh', `${window.innerHeight * 0.01}px`)
   }
@@ -36,18 +37,14 @@ onMounted(() => {
   window.addEventListener('resize', setVh)
 })
 
-onUnmounted(() => {
-  destroy()
-})
+onUnmounted(() => { destroy() })
 </script>
 
 <template>
-  <!--
-    Layout: full-viewport flex column.
-    Inner row: sidebar (fixed on mobile, static on desktop) + chat panel.
-  -->
-  <div class="flex flex-col bg-slate-100 overflow-hidden" style="height: 100vh; height: calc(var(--vh, 1vh) * 100);">
-
+  <div
+    class="flex flex-col bg-slate-100 overflow-hidden"
+    style="height: 100vh; height: calc(var(--vh, 1vh) * 100);"
+  >
     <AppHeader @open-about="openAbout" />
 
     <div class="flex flex-1 overflow-hidden relative">
@@ -66,7 +63,7 @@ onUnmounted(() => {
         ></div>
       </Transition>
 
-      <!-- Sidebar — fixed on mobile, normal flex child on desktop -->
+      <!-- Sidebar — fixed overlay on mobile, normal flex child on desktop -->
       <div
         class="fixed top-0 left-0 bottom-0 z-40 transition-transform duration-300
                lg:relative lg:translate-x-0 lg:flex lg:z-auto"
@@ -83,7 +80,7 @@ onUnmounted(() => {
       {{ peersStore.statusText }}
     </div>
 
-    <!-- Mobile FAB -->
+    <!-- Mobile FAB (peer list toggle) -->
     <button
       class="fixed left-3 bottom-10 w-12 h-12 bg-indigo-500 hover:bg-indigo-600
              text-white rounded-full shadow-xl flex items-center justify-center text-xl
@@ -92,13 +89,25 @@ onUnmounted(() => {
       @click="sidebarOpen = !sidebarOpen"
       aria-label="Toggle peer list"
     >👥</button>
-
   </div>
 
+  <!-- Portalled overlays (outside the main layout so they don't affect flex) -->
   <WelcomeModal ref="welcomeModal" />
+  <IncomingCall />
+  <CallBar />
 
-  <!-- Notification sound -->
+  <!-- One-shot message notification -->
   <audio id="notificationSound" preload="auto">
     <source src="/ring.mp3" type="audio/mpeg">
+  </audio>
+
+  <!-- Loops for the CALLEE while the call is ringing in -->
+  <audio id="ringtoneSound" loop preload="auto">
+    <source src="/ringtone.mp3" type="audio/mpeg">
+  </audio>
+
+  <!-- Loops for the CALLER while waiting for the callee to answer -->
+  <audio id="callerSound" loop preload="auto">
+    <source src="/caller.mp3" type="audio/mpeg">
   </audio>
 </template>

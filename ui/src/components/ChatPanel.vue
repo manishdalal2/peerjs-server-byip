@@ -1,13 +1,15 @@
 <script setup>
 import { ref, computed, nextTick, watch } from 'vue'
-import { usePeersStore } from '../stores/peers.js'
+import { usePeersStore }  from '../stores/peers.js'
 import { useMessagesStore } from '../stores/messages.js'
-import { usePeer } from '../composables/usePeer.js'
-import { fmtBytes } from '../stores/messages.js'
+import { useCallStore }   from '../stores/call.js'
+import { usePeer }        from '../composables/usePeer.js'
+import { fmtBytes }       from '../stores/messages.js'
 
 const peersStore = usePeersStore()
 const msgsStore  = useMessagesStore()
-const { sendText, sendFile } = usePeer()
+const callStore  = useCallStore()
+const { sendText, sendFile, startCall } = usePeer()
 
 const msgInput   = ref('')
 const fileInput  = ref(null)
@@ -15,7 +17,8 @@ const stagedFile = ref(null)
 const chatEl     = ref(null)
 const sending    = ref(false)
 
-const isConnected = computed(() => !!peersStore.connectedId)
+const isConnected  = computed(() => !!peersStore.connectedId)
+const canCall      = computed(() => isConnected.value && callStore.callState === 'idle')
 
 // Auto-scroll on new messages
 watch(() => msgsStore.messages.length, async () => {
@@ -45,10 +48,7 @@ function fileEmoji(name) {
 async function send() {
   if (!isConnected.value) return
   const text = msgInput.value.trim()
-  if (text) {
-    sendText(text)
-    msgInput.value = ''
-  }
+  if (text) { sendText(text); msgInput.value = '' }
   if (stagedFile.value) {
     const file = stagedFile.value
     clearStaged()
@@ -63,15 +63,37 @@ async function send() {
   <main class="flex-1 flex flex-col overflow-hidden min-w-0">
 
     <!-- ── Connection bar ── -->
-    <div class="px-4 py-2 bg-white border-b border-slate-200 flex items-center gap-2.5 text-sm flex-shrink-0">
+    <div class="px-4 py-2 bg-white border-b border-slate-200 flex items-center gap-2.5 flex-shrink-0">
       <div
         class="w-2 h-2 rounded-full flex-shrink-0 transition-colors duration-300"
         :class="isConnected ? 'bg-emerald-500' : 'bg-slate-300'"
       ></div>
       <span class="text-slate-500 text-xs">Connected to:</span>
-      <span class="font-semibold text-sm truncate">
+      <span class="font-semibold text-sm truncate flex-1">
         {{ peersStore.connectedLabel || 'No one — select a peer' }}
       </span>
+
+      <!-- Call button — only when connected and idle -->
+      <Transition
+        enter-active-class="transition-all duration-200"
+        enter-from-class="opacity-0 scale-75"
+        enter-to-class="opacity-100 scale-100"
+        leave-active-class="transition-all duration-150"
+        leave-to-class="opacity-0 scale-75"
+      >
+        <button
+          v-if="canCall"
+          @click="startCall"
+          title="Start audio call"
+          aria-label="Start audio call"
+          class="w-8 h-8 flex-shrink-0 rounded-full bg-emerald-500 hover:bg-emerald-600 active:bg-emerald-700
+                 text-white flex items-center justify-center transition-colors shadow-sm"
+        >
+          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M6.6 10.8c1.4 2.8 3.8 5.1 6.6 6.6l2.2-2.2c.3-.3.7-.4 1-.2 1.1.4 2.3.6 3.6.6.6 0 1 .4 1 1V20c0 .6-.4 1-1 1-9.4 0-17-7.6-17-17 0-.6.4-1 1-1h3.5c.6 0 1 .4 1 1 0 1.3.2 2.5.6 3.6.1.3 0 .7-.2 1L6.6 10.8z"/>
+          </svg>
+        </button>
+      </Transition>
     </div>
 
     <!-- ── Panel body ── -->
@@ -128,23 +150,16 @@ async function send() {
                 <div class="text-xs mt-0.5 opacity-75">{{ msg.sizeLabel }}</div>
               </div>
             </div>
-
-            <!-- Progress -->
             <template v-if="!msg.done">
-              <div
-                class="h-1.5 rounded-full overflow-hidden mb-1"
-                :class="msg.local ? 'bg-white/30' : 'bg-slate-200'"
-              >
-                <div
-                  class="h-full rounded-full transition-all duration-150"
+              <div class="h-1.5 rounded-full overflow-hidden mb-1"
+                :class="msg.local ? 'bg-white/30' : 'bg-slate-200'">
+                <div class="h-full rounded-full transition-all duration-150"
                   :class="msg.local ? 'bg-white' : 'bg-indigo-500'"
-                  :style="{ width: msg.progress + '%' }"
-                ></div>
+                  :style="{ width: msg.progress + '%' }"></div>
               </div>
               <div class="text-xs opacity-70">{{ msg.progress }}%</div>
             </template>
             <div v-else class="text-xs opacity-80">{{ msg.doneLabel }}</div>
-
             <div class="text-[10px] mt-1.5 opacity-60 text-right">{{ msg.time }}</div>
           </div>
 
@@ -186,13 +201,14 @@ async function send() {
             title="Attach file"
           >📎</button>
 
+          <!-- text-base on mobile prevents iOS auto-zoom on focus -->
           <input
             v-model="msgInput"
             placeholder="Type a message…"
             @keydown.enter.exact.prevent="send"
-            class="flex-1 px-4 py-2 border border-slate-200 rounded-full text-sm outline-none
+            class="flex-1 px-4 py-2 border border-slate-200 rounded-full outline-none
                    focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100 transition
-                   text-base sm:text-sm" <!-- text-base prevents iOS zoom -->
+                   text-base sm:text-sm"
           />
 
           <button

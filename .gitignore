@@ -21,7 +21,4 @@ npm-debug.log
 .cache
 .vscode
 .DS_Store
-public/index.html
-public/ring.mp3
-public/assets/index-CIwdj6LV.js
-public/assets/index-DiLEXiqz.css
+public
