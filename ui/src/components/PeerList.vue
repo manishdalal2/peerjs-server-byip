@@ -10,6 +10,7 @@ const { connectTo, sendProfileUpdate } = usePeer()
 
 const refreshing = ref(false)
 const manualId   = ref('')
+const showPin    = ref(false)
 
 const peers = computed(() => Array.from(peersStore.availPeers.values()))
 
@@ -53,13 +54,21 @@ function connectManual() {
                  focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100 transition"
         />
         <div class="flex gap-1.5">
-          <input
-            v-model="peersStore.pin"
-            maxlength="50"
-            placeholder="PIN (optional)"
-            class="flex-1 min-w-0 text-xs px-2.5 py-1.5 border border-slate-200 rounded-lg outline-none
-                   focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100 transition"
-          />
+          <div class="flex flex-1 min-w-0 border border-slate-200 rounded-lg overflow-hidden
+                      focus-within:border-indigo-400 focus-within:ring-1 focus-within:ring-indigo-100 transition">
+            <input
+              v-model="peersStore.pin"
+              :type="showPin ? 'text' : 'password'"
+              maxlength="50"
+              placeholder="PIN (optional)"
+              class="flex-1 min-w-0 text-xs px-2.5 py-1.5 outline-none bg-transparent"
+            />
+            <button
+              type="button"
+              @click="showPin = !showPin"
+              class="px-2 text-[10px] text-slate-400 hover:text-indigo-500 transition flex-shrink-0 border-l border-slate-200 bg-slate-50"
+            >{{ showPin ? 'Hide' : 'Show' }}</button>
+          </div>
           <button
             @click="sendProfileUpdate"
             class="text-xs px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 active:bg-indigo-700

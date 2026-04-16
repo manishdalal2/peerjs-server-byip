@@ -17,6 +17,10 @@ const { primeAudio }    = useAudio()
 
 const welcomeModal = ref(null)
 const sidebarOpen  = ref(false)
+const isPortrait   = ref(window.matchMedia('(orientation: portrait)').matches)
+
+let orientationMq      = null
+let orientationHandler = null
 
 function openAbout()    { welcomeModal.value?.show() }
 function closeSidebar() { sidebarOpen.value = false }
@@ -36,9 +40,22 @@ onMounted(() => {
   }
   setVh()
   window.addEventListener('resize', setVh)
+
+  // On large portrait screens (e.g. 15-inch Android tablets), keep sidebar as overlay
+  orientationMq = window.matchMedia('(orientation: portrait)')
+  orientationHandler = (e) => {
+    isPortrait.value = e.matches
+    if (e.matches) sidebarOpen.value = false
+  }
+  orientationMq.addEventListener('change', orientationHandler)
 })
 
-onUnmounted(() => { destroy() })
+onUnmounted(() => {
+  destroy()
+  if (orientationMq && orientationHandler) {
+    orientationMq.removeEventListener('change', orientationHandler)
+  }
+})
 </script>
 
 <template>
@@ -46,11 +63,11 @@ onUnmounted(() => { destroy() })
     class="flex flex-col bg-slate-100 overflow-hidden"
     style="height: 100vh; height: calc(var(--vh, 1vh) * 100);"
   >
-    <AppHeader :sidebar-open="sidebarOpen" @open-about="openAbout" @toggle-sidebar="sidebarOpen = !sidebarOpen" />
+    <AppHeader :sidebar-open="sidebarOpen" :force-overlay="isPortrait" @open-about="openAbout" @toggle-sidebar="sidebarOpen = !sidebarOpen" />
 
     <div class="flex flex-1 overflow-hidden relative">
 
-      <!-- Mobile backdrop -->
+      <!-- Mobile/portrait backdrop -->
       <Transition
         enter-active-class="transition-opacity duration-300"
         enter-from-class="opacity-0"
@@ -59,16 +76,19 @@ onUnmounted(() => { destroy() })
       >
         <div
           v-if="sidebarOpen"
-          class="fixed inset-0 bg-black/40 z-30 lg:hidden"
+          class="fixed inset-0 bg-black/40 z-30"
+          :class="isPortrait ? '' : 'lg:hidden'"
           @click="closeSidebar"
         ></div>
       </Transition>
 
-      <!-- Sidebar — fixed overlay on mobile, normal flex child on desktop -->
+      <!-- Sidebar — fixed overlay on mobile and portrait screens, inline on landscape desktop -->
       <div
-        class="fixed top-0 left-0 bottom-0 z-40 transition-transform duration-300
-               lg:relative lg:translate-x-0 lg:flex lg:z-auto"
-        :class="sidebarOpen ? 'translate-x-0' : '-translate-x-full'"
+        class="fixed top-0 left-0 bottom-0 z-40 transition-transform duration-300"
+        :class="[
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full',
+          isPortrait ? '' : 'lg:relative lg:translate-x-0 lg:flex lg:z-auto'
+        ]"
       >
         <PeerList @peer-selected="closeSidebar" />
       </div>

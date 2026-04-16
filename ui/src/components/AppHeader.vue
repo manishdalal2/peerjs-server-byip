@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { usePeersStore } from '../stores/peers.js'
 
-defineProps({ sidebarOpen: Boolean })
+defineProps({ sidebarOpen: Boolean, forceOverlay: Boolean })
 defineEmits(['open-about', 'toggle-sidebar'])
 
 const peers = usePeersStore()
@@ -15,12 +15,12 @@ const shortId = computed(() =>
   <header class="bg-gradient-to-r from-indigo-500 to-purple-600 text-white px-3 sm:px-5 h-14 flex items-center justify-between shadow-lg flex-shrink-0 gap-2">
 
     <div class="flex items-center gap-2">
-      <!-- Hamburger — mobile only, opens peer list sidebar -->
+      <!-- Hamburger — mobile and portrait screens, opens peer list sidebar -->
       <button
         @click="$emit('toggle-sidebar')"
-        class="lg:hidden w-9 h-9 rounded-lg flex flex-col items-center justify-center gap-1.5
+        class="w-9 h-9 rounded-lg flex flex-col items-center justify-center gap-1.5
                hover:bg-white/15 active:bg-white/25 transition-colors flex-shrink-0"
-        :class="sidebarOpen ? 'bg-white/20' : ''"
+        :class="[sidebarOpen ? 'bg-white/20' : '', forceOverlay ? '' : 'lg:hidden']"
         aria-label="Toggle peer list"
       >
         <span
