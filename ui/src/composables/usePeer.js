@@ -335,22 +335,33 @@ export function usePeer() {
   function connectTo(peerId, alias, hasPin) {
     if (peerId === peersStore.myPeerId) { peersStore.setStatus('Cannot connect to yourself!'); return }
 
-    // Tab already open — just focus it
-    if (peersStore.openConversations.has(peerId)) {
+    const existing = peersStore.openConversations.get(peerId)
+
+    // Tab open and already connected — just focus it
+    if (existing?.connected) {
       peersStore.setActiveTab(peerId)
       return
     }
 
+    // Tab exists but disconnected — clean up stale connection before reconnecting
+    if (existing) {
+      const old = connections.get(peerId)
+      if (old) { try { old.close() } catch {} connections.delete(peerId) }
+    }
+
     primeAudio()
-    const pin = hasPin ? window.prompt(`Enter PIN for ${alias || peerId}`) : ''
-    if (hasPin && pin === null) { peersStore.setStatus('Connection cancelled'); return }
 
-    // Store PIN so we can include it in future OFFERs (calls, screen share) to this peer
-    const trimmedPin = pin?.trim() || ''
-    if (trimmedPin) peerPins.set(peerId, trimmedPin)
+    // Reuse stored PIN so we don't prompt again on reconnect
+    let trimmedPin = peerPins.get(peerId) || ''
+    if (!trimmedPin && hasPin) {
+      const pin = window.prompt(`Enter PIN for ${alias || peerId}`)
+      if (pin === null) { peersStore.setStatus('Connection cancelled'); return }
+      trimmedPin = pin.trim()
+      if (trimmedPin) peerPins.set(peerId, trimmedPin)
+    }
 
-    // Open the tab immediately so user sees it while connecting
-    peersStore.openTab(peerId, alias || peerId.slice(0, 12) + '…')
+    if (!existing) peersStore.openTab(peerId, alias || peerId.slice(0, 12) + '…')
+    peersStore.setActiveTab(peerId)
     peersStore.setStatus(`Connecting to ${alias || peerId}…`)
     wireConn(peerInstance.connect(peerId, {
       reliable: true,
@@ -404,10 +415,18 @@ export function usePeer() {
     const host = window.location.hostname
     const port = Number(window.location.port) || (window.location.protocol === 'https:' ? 443 : 80)
 
-    peerInstance = new Peer({
+    // Persist peer ID across refreshes so others can always reach you by the same ID
+    const PEER_ID_KEY = 'shareByAirPeerId'
+    let savedId = localStorage.getItem(PEER_ID_KEY)
+    if (!savedId) {
+      savedId = crypto.randomUUID()
+      localStorage.setItem(PEER_ID_KEY, savedId)
+    }
+
+    peerInstance = new Peer(savedId, {
       host, port, path: '/', key: 'peerjs',
       secure: window.location.protocol === 'https:',
-      config: { iceServers: [{ urls: '' }] },//stun:stun.l.google.com:19302
+      config: { iceServers: [] },
     })
 
     peerInstance.on('open', id => {
@@ -452,11 +471,19 @@ export function usePeer() {
     peerInstance.on('disconnected', () => {
       peersStore.serverConnected = false
       peersStore.setStatus('Disconnected — reconnecting…')
-      peerInstance.reconnect()
+      peerInstance?.reconnect()
     })
     peerInstance.on('close', () => { peersStore.serverConnected = false })
     peerInstance.on('error', err => {
       peersStore.serverConnected = false
+      if (err.type === 'unavailable-id') {
+        // Saved ID is still live on server (brief post-refresh window) — clear it and retry
+        localStorage.removeItem(PEER_ID_KEY)
+        peerInstance.destroy(); peerInstance = null
+        setTimeout(init, 1000)
+        peersStore.setStatus('ID conflict — reconnecting with new ID…')
+        return
+      }
       peersStore.setStatus('Error: ' + (err.type || err))
     })
   }
