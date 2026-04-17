@@ -6,11 +6,15 @@ import { useAudio }         from './useAudio.js'
 
 // ── Module-level singletons ───────────────────────────────────────────────────
 let peerInstance     = null
-let connInstance     = null   // DataConnection  (chat / file / call-signalling)
-let callMediaConn    = null   // MediaConnection (audio call)
-let screenMediaConn  = null   // MediaConnection (screen share)
-let pendingMediaConn = null   // incoming audio call waiting for user to Accept
+let callMediaConn    = null
+let screenMediaConn  = null
+let pendingMediaConn = null
 let callTimeoutId    = null
+let callPeerId       = null   // peer currently in a call with
+let screenPeerId     = null   // peer currently screen-sharing with
+
+const connections = new Map()  // Map<peerId, DataConnection>
+const peerPins    = new Map()  // Map<peerId, string> — PIN used to reach that peer
 
 const CHUNK_SIZE      = 16 * 1024
 const BUF_HIGH        = 1 * 1024 * 1024
@@ -24,8 +28,27 @@ export function usePeer() {
   const { primeAudio, playNotification, startRingtone, startCallerTone, stopAllCallAudio } = useAudio()
 
   // ── Helpers ───────────────────────────────────────────────────────────────
-  function sendSignal(payload) {
-    if (connInstance?.open) connInstance.send(JSON.stringify(payload))
+  function _connFor(peerId) { return connections.get(peerId) }
+  function _activeConn()    { return _connFor(peersStore.activeTabId) }
+
+  function sendSignalTo(peerId, payload) {
+    const conn = _connFor(peerId)
+    if (conn?.open) conn.send(JSON.stringify(payload))
+  }
+
+  // Returns the PIN needed to reach peerId, prompting if not yet stored.
+  // Every WebRTC OFFER (call + screen share) must include the destination's PIN.
+  function _getPinFor(peerId) {
+    if (peerPins.has(peerId)) return peerPins.get(peerId)
+    const peer = peersStore.availPeers.get(peerId)
+    if (peer?.hasPin) {
+      const label = peersStore.openConversations.get(peerId)?.label || peerId
+      const pin = window.prompt(`Enter PIN to call ${label}`)
+      if (pin === null) return null   // user cancelled
+      peerPins.set(peerId, pin.trim())
+      return pin.trim()
+    }
+    return null
   }
 
   async function getMic() {
@@ -33,89 +56,94 @@ export function usePeer() {
   }
 
   function attachRemoteAudio(stream) {
-    console.log('[Call] attachRemoteAudio — tracks:', stream.getAudioTracks().length, stream.getAudioTracks().map(t => t.label))
     callStore.remoteStream = stream
     const el = document.getElementById('remoteAudio')
-    if (!el) { console.error('[Call] #remoteAudio element not found in DOM!'); return }
+    if (!el) return
     el.srcObject = stream
-    el.play()
-      .then(() => console.log('[Call] remoteAudio.play() ✓'))
-      .catch(err => console.error('[Call] remoteAudio.play() FAILED:', err.name, err.message))
+    el.play().catch(() => {})
   }
 
   // ── Wire audio MediaConnection ────────────────────────────────────────────
   function wireAudioConn(mc, localStream) {
     callMediaConn = mc
-
     mc.on('stream', remoteStream => {
       attachRemoteAudio(remoteStream)
       callStore.callState = 'in-call'
       callStore.startTimer()
-      peersStore.setStatus(`In call with ${peersStore.connectedLabel}`)
+      const label = peersStore.openConversations.get(callPeerId)?.label || callPeerId || 'peer'
+      peersStore.setStatus(`In call with ${label}`)
     })
-
     mc.on('close', () => _cleanupCall('Call ended'))
     mc.on('error', () => _cleanupCall('Call error'))
   }
 
   function _cleanupCall(msg = 'Call ended') {
-    callMediaConn?.close();  callMediaConn    = null
+    callMediaConn?.close(); callMediaConn = null
     pendingMediaConn = null
     clearTimeout(callTimeoutId)
     stopAllCallAudio()
     callStore.reset()
+    callPeerId = null
     peersStore.setStatus(msg)
   }
 
   // ── Wire screen-share MediaConnection (receiver side) ─────────────────────
   function wireScreenRecv(mc) {
     screenMediaConn = mc
-
     mc.on('stream', stream => {
       callStore.remoteScreenStream = stream
       callStore.isViewingScreen    = true
-      peersStore.setStatus(`Viewing ${peersStore.connectedLabel}'s screen`)
+      const label = peersStore.openConversations.get(screenPeerId)?.label || 'peer'
+      peersStore.setStatus(`Viewing ${label}'s screen`)
     })
-
-    mc.on('close', () => {
-      callStore.resetScreen()
-      peersStore.setStatus('Screen share ended')
-    })
-
-    mc.on('error', () => {
-      callStore.resetScreen()
-    })
+    mc.on('close', () => { callStore.resetScreen(); peersStore.setStatus('Screen share ended') })
+    mc.on('error', () => { callStore.resetScreen() })
   }
 
   // ── Audio call — outgoing ─────────────────────────────────────────────────
   async function startCall() {
-    if (!connInstance?.open) { peersStore.setStatus('Connect to a peer before calling'); return }
+    const peerId = peersStore.activeTabId
+    const conn   = _connFor(peerId)
+    if (!conn?.open) { peersStore.setStatus('Connect to a peer before calling'); return }
     if (callStore.callState !== 'idle') return
+
+    // Ensure we have the PIN before acquiring mic (prompt is synchronous, mic is async)
+    const pin = _getPinFor(peerId)
+    if (pin === null && peersStore.availPeers.get(peerId)?.hasPin) {
+      peersStore.setStatus('PIN required to call this peer'); return
+    }
+
+    callPeerId = peerId
     try {
       const stream = await getMic()
       callStore.localStream = stream
       callStore.callState   = 'ringing-out'
-      sendSignal({ type: 'call-request', callerName: peersStore.displayName || peersStore.myAlias })
-      peersStore.setStatus(`Calling ${peersStore.connectedLabel}…`)
-      console.log('[Call] CALLER: ringing-out, calling startCallerTone()')
+      const label = peersStore.openConversations.get(peerId)?.label || peerId
+      callStore.callerName  = label
+      sendSignalTo(peerId, { type: 'call-request', callerName: peersStore.displayName || peersStore.myAlias })
+      peersStore.setStatus(`Calling ${label}…`)
       startCallerTone()
       callTimeoutId = setTimeout(() => cancelCall(), RING_TIMEOUT_MS)
     } catch (err) {
       peersStore.setStatus('Microphone access denied: ' + (err.message || err))
       callStore.reset()
+      callPeerId = null
     }
   }
 
   function _onCallAccepted() {
-    console.log('[Call] CALLER: call-accept received, placing WebRTC call')
     clearTimeout(callTimeoutId)
     stopAllCallAudio()
-    wireAudioConn(peerInstance.call(connInstance.peer, callStore.localStream), callStore.localStream)
+    const pin = peerPins.get(callPeerId)
+    wireAudioConn(
+      peerInstance.call(callPeerId, callStore.localStream, pin ? { metadata: { pin } } : undefined),
+      callStore.localStream,
+    )
   }
 
   function cancelCall() {
     if (callStore.callState !== 'ringing-out') return
-    sendSignal({ type: 'call-cancel' })
+    if (callPeerId) sendSignalTo(callPeerId, { type: 'call-cancel' })
     _cleanupCall('Call cancelled')
   }
 
@@ -125,15 +153,11 @@ export function usePeer() {
     try {
       const stream = await getMic()
       callStore.localStream = stream
-      console.log('[Call] CALLEE: mic acquired, sending call-accept. pendingMediaConn:', !!pendingMediaConn)
-      sendSignal({ type: 'call-accept' })
+      if (callPeerId) sendSignalTo(callPeerId, { type: 'call-accept' })
       if (pendingMediaConn) {
-        console.log('[Call] CALLEE: answering pendingMediaConn immediately')
         pendingMediaConn.answer(stream)
         wireAudioConn(pendingMediaConn, stream)
         pendingMediaConn = null
-      } else {
-        console.log('[Call] CALLEE: no pendingMediaConn yet — will answer when peer.on("call") fires')
       }
     } catch (err) {
       peersStore.setStatus('Microphone access denied: ' + (err.message || err))
@@ -143,120 +167,134 @@ export function usePeer() {
 
   function rejectCall() {
     if (callStore.callState !== 'ringing-in') return
-    sendSignal({ type: 'call-reject' })
+    if (callPeerId) sendSignalTo(callPeerId, { type: 'call-reject' })
     _cleanupCall('Call declined')
   }
 
   function endCall() {
-    sendSignal({ type: 'call-end' })
+    if (callPeerId) sendSignalTo(callPeerId, { type: 'call-end' })
     _cleanupCall('Call ended')
   }
 
   function toggleMute() {
     const track = callStore.localStream?.getAudioTracks()[0]
     if (!track) return
-    track.enabled  = !track.enabled
+    track.enabled = !track.enabled
     callStore.isMuted = !track.enabled
   }
 
   // ── Screen share — start (sharer side) ───────────────────────────────────
   async function startScreenShare() {
-    if (!connInstance?.open) { peersStore.setStatus('Connect to a peer before sharing'); return }
+    const peerId = peersStore.activeTabId
+    const conn   = _connFor(peerId)
+    if (!conn?.open) { peersStore.setStatus('Connect to a peer before sharing'); return }
     if (callStore.isSharingScreen) return
+    // Ensure we have the PIN before starting screen capture
+    const pin = _getPinFor(peerId)
+    if (pin === null && peersStore.availPeers.get(peerId)?.hasPin) {
+      peersStore.setStatus('PIN required to share screen with this peer'); return
+    }
 
+    screenPeerId = peerId
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia({ video: true, audio: true })
       callStore.screenStream    = stream
       callStore.isSharingScreen = true
-
-      // Signal receiver so their UI can prepare
-      sendSignal({ type: 'screen-share-start', sharerName: peersStore.displayName || peersStore.myAlias })
-
-      // Call peer with screen stream — metadata.type = 'screen' distinguishes from audio
-      screenMediaConn = peerInstance.call(connInstance.peer, stream, {
-        metadata: { type: 'screen' },
-      })
-
+      sendSignalTo(peerId, { type: 'screen-share-start', sharerName: peersStore.displayName || peersStore.myAlias })
+      const screenMeta = pin ? { type: 'screen', pin } : { type: 'screen' }
+      screenMediaConn = peerInstance.call(peerId, stream, { metadata: screenMeta })
       screenMediaConn.on('close',  () => _cleanupScreenShare())
       screenMediaConn.on('error',  () => _cleanupScreenShare())
-
-      // Handle the browser's native "Stop sharing" button
       stream.getVideoTracks()[0].onended = () => stopScreenShare()
-
       peersStore.setStatus('Sharing your screen…')
     } catch (err) {
       if (err.name !== 'NotAllowedError') {
         peersStore.setStatus('Screen share failed: ' + (err.message || err))
       }
       callStore.resetScreen()
+      screenPeerId = null
     }
   }
 
   // ── Screen share — stop (sharer side) ────────────────────────────────────
   function stopScreenShare() {
     if (!callStore.isSharingScreen) return
-    sendSignal({ type: 'screen-share-end' })
+    if (screenPeerId) sendSignalTo(screenPeerId, { type: 'screen-share-end' })
     _cleanupScreenShare()
   }
 
   function _cleanupScreenShare(msg = 'Screen share ended') {
     screenMediaConn?.close(); screenMediaConn = null
     callStore.resetScreen()
+    screenPeerId = null
     peersStore.setStatus(msg)
   }
 
   // ── DataConnection ────────────────────────────────────────────────────────
   function wireConn(c) {
-    connInstance = c
+    connections.set(c.peer, c)
 
     c.on('open', () => {
-      const p = peersStore.availPeers.get(c.peer)
+      const p     = peersStore.availPeers.get(c.peer)
       peersStore.setPeerConnected(c.peer, p?.displayName ?? null, p?.alias ?? null)
       playNotification()
     })
 
     c.on('data', data => {
-      if (data instanceof ArrayBuffer) { msgsStore.onChunk(data); return }
+      const peerId = c.peer
+      if (data instanceof ArrayBuffer) { msgsStore.onChunk(peerId, data); return }
       if (typeof data !== 'string') return
       let msg
       try { msg = JSON.parse(data) } catch { return }
 
       switch (msg.type) {
-        // ── Chat / file ──────────────────────────────────────────────────
+        // ── Chat / file ────────────────────────────────────────────────────
         case 'chat':
-          msgsStore.addRemoteText(msg.text); playNotification(); break
+          msgsStore.addRemoteText(peerId, msg.text)
+          playNotification()
+          break
         case 'file-start':
-          msgsStore.onFileStart(msg); playNotification(); break
+          msgsStore.onFileStart(peerId, msg)
+          playNotification()
+          break
         case 'file-end':
-          msgsStore.onFileEnd(); break
+          msgsStore.onFileEnd(peerId)
+          break
 
-        // ── Audio call signalling ────────────────────────────────────────
+        // ── Audio call signalling ──────────────────────────────────────────
         case 'call-request':
-          if (callStore.callState !== 'idle') { sendSignal({ type: 'call-reject' }); break }
+          if (callStore.callState !== 'idle') { sendSignalTo(peerId, { type: 'call-reject' }); break }
+          callPeerId           = peerId
           callStore.callState  = 'ringing-in'
-          callStore.callerName = msg.callerName || peersStore.connectedLabel || 'Someone'
+          callStore.callerName = msg.callerName || peersStore.openConversations.get(peerId)?.label || 'Someone'
           peersStore.setStatus(`Incoming call from ${callStore.callerName}`)
-          console.log('[Call] CALLEE: call-request received, calling startRingtone()')
           startRingtone()
           break
         case 'call-accept':
-          if (callStore.callState === 'ringing-out') _onCallAccepted(); break
+          if (callStore.callState === 'ringing-out' && peerId === callPeerId) _onCallAccepted()
+          break
         case 'call-reject':
-          if (callStore.callState === 'ringing-out') _cleanupCall('Call declined'); break
+          if (callStore.callState === 'ringing-out' && peerId === callPeerId) _cleanupCall('Call declined')
+          break
         case 'call-cancel':
-          if (callStore.callState === 'ringing-in') { stopAllCallAudio(); _cleanupCall('Caller cancelled') } break
+          if (callStore.callState === 'ringing-in' && peerId === callPeerId) {
+            stopAllCallAudio(); _cleanupCall('Caller cancelled')
+          }
+          break
         case 'call-end':
-          if (callStore.callState === 'in-call') _cleanupCall('Call ended by peer'); break
+          if (callStore.callState === 'in-call' && peerId === callPeerId) _cleanupCall('Call ended by peer')
+          break
 
-        // ── Screen share signalling ──────────────────────────────────────
+        // ── Screen share signalling ────────────────────────────────────────
         case 'screen-share-start':
-          // Receiver UI will react to isViewingScreen becoming true via peer.on('call')
-          callStore.isViewingScreen = false  // reset; will be set true when stream arrives
-          peersStore.setStatus(`${msg.sharerName || peersStore.connectedLabel} is sharing their screen…`)
+          screenPeerId = peerId
+          callStore.isViewingScreen = false
+          peersStore.setStatus(`${msg.sharerName || peersStore.openConversations.get(peerId)?.label} is sharing their screen…`)
           break
         case 'screen-share-end':
           if (callStore.isViewingScreen) {
             callStore.resetScreen()
+            screenPeerId = null
             peersStore.setStatus('Screen share ended')
           }
           break
@@ -264,9 +302,10 @@ export function usePeer() {
     })
 
     c.on('close', () => {
-      if (callStore.callState !== 'idle') _cleanupCall('Peer disconnected')
-      if (callStore.isSharingScreen || callStore.isViewingScreen) _cleanupScreenShare('Peer disconnected')
-      peersStore.setPeerDisconnected()
+      connections.delete(c.peer)
+      if (callPeerId === c.peer && callStore.callState !== 'idle') _cleanupCall('Peer disconnected')
+      if (screenPeerId === c.peer && (callStore.isSharingScreen || callStore.isViewingScreen)) _cleanupScreenShare('Peer disconnected')
+      peersStore.setPeerDisconnected(c.peer)
       peersStore.setStatus('Peer disconnected')
     })
 
@@ -295,25 +334,54 @@ export function usePeer() {
 
   function connectTo(peerId, alias, hasPin) {
     if (peerId === peersStore.myPeerId) { peersStore.setStatus('Cannot connect to yourself!'); return }
-    if (connInstance) connInstance.close()
+
+    // Tab already open — just focus it
+    if (peersStore.openConversations.has(peerId)) {
+      peersStore.setActiveTab(peerId)
+      return
+    }
+
     primeAudio()
     const pin = hasPin ? window.prompt(`Enter PIN for ${alias || peerId}`) : ''
     if (hasPin && pin === null) { peersStore.setStatus('Connection cancelled'); return }
+
+    // Store PIN so we can include it in future OFFERs (calls, screen share) to this peer
+    const trimmedPin = pin?.trim() || ''
+    if (trimmedPin) peerPins.set(peerId, trimmedPin)
+
+    // Open the tab immediately so user sees it while connecting
+    peersStore.openTab(peerId, alias || peerId.slice(0, 12) + '…')
     peersStore.setStatus(`Connecting to ${alias || peerId}…`)
-    wireConn(peerInstance.connect(peerId, { reliable: true, serialization: 'raw', metadata: pin ? { pin: pin.trim() } : undefined }))
+    wireConn(peerInstance.connect(peerId, {
+      reliable: true,
+      serialization: 'raw',
+      metadata: trimmedPin ? { pin: trimmedPin } : undefined,
+    }))
+  }
+
+  function closeConversation(peerId) {
+    const conn = _connFor(peerId)
+    if (conn) { conn.close(); connections.delete(peerId) }
+    peerPins.delete(peerId)
+    peersStore.closeTab(peerId)
+    msgsStore.clearConversation(peerId)
   }
 
   function sendText(text) {
-    if (!connInstance?.open) return
-    connInstance.send(JSON.stringify({ type: 'chat', text }))
-    msgsStore.addLocalText(text)
+    const peerId = peersStore.activeTabId
+    const conn   = _activeConn()
+    if (!conn?.open) return
+    conn.send(JSON.stringify({ type: 'chat', text }))
+    msgsStore.addLocalText(peerId, text)
   }
 
   async function sendFile(file) {
-    if (!connInstance?.open) return
-    const msgId = msgsStore.addLocalFile(file.name, file.size)
-    connInstance.send(JSON.stringify({ type: 'file-start', name: file.name, size: file.size, fileType: file.type }))
-    const dc = connInstance._dc ?? null
+    const peerId = peersStore.activeTabId
+    const conn   = _connFor(peerId)
+    if (!conn?.open) return
+    const msgId = msgsStore.addLocalFile(peerId, file.name, file.size)
+    conn.send(JSON.stringify({ type: 'file-start', name: file.name, size: file.size, fileType: file.type }))
+    const dc = conn._dc ?? null
     if (dc) dc.bufferedAmountLowThreshold = BUF_LOW
     let offset = 0
     while (offset < file.size) {
@@ -321,12 +389,12 @@ export function usePeer() {
       const buf = await file.slice(offset, end).arrayBuffer()
       if (dc && dc.bufferedAmount > BUF_HIGH)
         await new Promise(r => dc.addEventListener('bufferedamountlow', r, { once: true }))
-      connInstance.send(buf); offset = end
-      msgsStore.updateFileProgress(msgId, Math.round((offset / file.size) * 100))
+      conn.send(buf); offset = end
+      msgsStore.updateFileProgress(peerId, msgId, Math.round((offset / file.size) * 100))
       await new Promise(r => setTimeout(r, 0))
     }
-    connInstance.send(JSON.stringify({ type: 'file-end' }))
-    msgsStore.finalizeFile(msgId, '✓ Sent')
+    conn.send(JSON.stringify({ type: 'file-end' }))
+    msgsStore.finalizeFile(peerId, msgId, '✓ Sent')
     peersStore.setStatus(`Sent: ${file.name}`)
   }
 
@@ -336,8 +404,11 @@ export function usePeer() {
     const host = window.location.hostname
     const port = Number(window.location.port) || (window.location.protocol === 'https:' ? 443 : 80)
 
-    peerInstance = new Peer({ host, port, path: '/', key: 'peerjs', secure: window.location.protocol === 'https:',
-      config: { iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] } })
+    peerInstance = new Peer({
+      host, port, path: '/', key: 'peerjs',
+      secure: window.location.protocol === 'https:',
+      config: { iceServers: [{ urls: '' }] },//stun:stun.l.google.com:19302
+    })
 
     peerInstance.on('open', id => {
       peersStore.myPeerId = id; peersStore.serverConnected = true
@@ -346,36 +417,34 @@ export function usePeer() {
       setTimeout(sendProfileUpdate, 300); primeAudio()
     })
 
-    peerInstance.on('connection', c => { primeAudio(); wireConn(c); peersStore.setStatus(`Incoming connection from ${c.peer}`) })
+    peerInstance.on('connection', c => {
+      primeAudio()
+      const p     = peersStore.availPeers.get(c.peer)
+      const label = p?.displayName || p?.alias || c.peer.slice(0, 12) + '…'
+      peersStore.openTab(c.peer, label)
+      wireConn(c)
+      peersStore.setStatus(`Incoming connection from ${label}`)
+    })
 
-    // ── Incoming media connection — route by metadata.type ─────────────────
     peerInstance.on('call', mc => {
-      // ── Screen share (auto-answer, no local stream needed) ──────────────
+      // Screen share — auto-answer, no local stream needed
       if (mc.metadata?.type === 'screen') {
-        mc.answer()          // receive-only; send nothing back
+        mc.answer()
         wireScreenRecv(mc)
         screenMediaConn = mc
         return
       }
 
-      // ── Audio call ───────────────────────────────────────────────────────
+      // Audio call
       pendingMediaConn = mc
-
-      // If user already clicked Accept and mic is ready, answer immediately.
-      // Check localStream (not callState==='in-call') because callState is still
-      // 'ringing-in' until the stream arrives — a chicken-and-egg if we wait for it.
-      console.log('[Call] peer.on("call") — callState:', callStore.callState, 'localStream:', !!callStore.localStream)
       if (callStore.localStream && callStore.callState !== 'idle') {
-        console.log('[Call] CALLEE: answering mc in peer.on("call") (offer arrived after accept)')
         mc.answer(callStore.localStream)
         wireAudioConn(mc, callStore.localStream)
         pendingMediaConn = null
         return
       }
-
       if (callStore.callState === 'idle') { mc.close(); pendingMediaConn = null; return }
 
-      // callState === 'ringing-in', mic not acquired yet — acceptCall() will answer
       mc.on('close', () => { if (callStore.callState !== 'idle') _cleanupCall('Call ended') })
       mc.on('error', () => _cleanupCall('Call error'))
     })
@@ -385,19 +454,26 @@ export function usePeer() {
       peersStore.setStatus('Disconnected — reconnecting…')
       peerInstance.reconnect()
     })
-    peerInstance.on('close', () => { peersStore.serverConnected = false; peersStore.setPeerDisconnected() })
-    peerInstance.on('error', err => { peersStore.serverConnected = false; peersStore.setStatus('Error: ' + (err.type || err)) })
+    peerInstance.on('close', () => { peersStore.serverConnected = false })
+    peerInstance.on('error', err => {
+      peersStore.serverConnected = false
+      peersStore.setStatus('Error: ' + (err.type || err))
+    })
   }
 
   function destroy() {
     _cleanupCall(); _cleanupScreenShare()
-    connInstance?.close(); peerInstance?.destroy()
-    peerInstance = null; connInstance = null
+    connections.forEach(c => c.close())
+    connections.clear()
+    peerPins.clear()
+    peerInstance?.destroy()
+    peerInstance = null
   }
 
   return {
     init, destroy,
-    connectTo, sendText, sendFile, sendProfileUpdate,
+    connectTo, closeConversation,
+    sendText, sendFile, sendProfileUpdate,
     startCall, cancelCall, acceptCall, rejectCall, endCall, toggleMute,
     startScreenShare, stopScreenShare,
   }

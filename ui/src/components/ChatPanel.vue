@@ -1,33 +1,109 @@
 <script setup>
 import { ref, computed, nextTick, watch } from 'vue'
-import { usePeersStore }  from '../stores/peers.js'
+import { usePeersStore }    from '../stores/peers.js'
 import { useMessagesStore } from '../stores/messages.js'
-import { useCallStore }   from '../stores/call.js'
-import { usePeer }        from '../composables/usePeer.js'
-import { fmtBytes }       from '../stores/messages.js'
+import { useCallStore }     from '../stores/call.js'
+import { usePeer }          from '../composables/usePeer.js'
+import { fmtBytes }         from '../stores/messages.js'
 
 const peersStore = usePeersStore()
 const msgsStore  = useMessagesStore()
 const callStore  = useCallStore()
-const { sendText, sendFile, startCall, startScreenShare, stopScreenShare } = usePeer()
+const { sendText, sendFile, startCall, startScreenShare, stopScreenShare, closeConversation } = usePeer()
 
 const msgInput   = ref('')
+const inputEl    = ref(null)
 const fileInput  = ref(null)
 const stagedFile = ref(null)
 const chatEl     = ref(null)
 const sending    = ref(false)
+const copiedId   = ref(null)
 
-const isConnected   = computed(() => !!peersStore.connectedId)
-const canCall       = computed(() => isConnected.value && callStore.callState === 'idle')
-const canScreen     = computed(() => isConnected.value && !callStore.isSharingScreen && !callStore.isViewingScreen)
-const isSharingNow  = computed(() => callStore.isSharingScreen)
+// ── Text rendering: escape HTML → linkify URLs → preserve newlines ────────────
+const URL_RE = /https?:\/\/[^\s<>"')\]]+|www\.[a-zA-Z0-9-]+\.[^\s<>"')\]]+/g
 
-// Auto-scroll on new messages
-watch(() => msgsStore.messages.length, async () => {
+function escapeHtml(s) {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+          .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+}
+
+function renderText(text) {
+  const escaped = escapeHtml(text)
+  const linked  = escaped.replace(URL_RE, url => {
+    const href = url.startsWith('http') ? url : 'https://' + url
+    return `<a href="${href}" target="_blank" rel="noopener noreferrer" class="underline decoration-1 break-all hover:opacity-80 transition-opacity">${url}</a>`
+  })
+  return linked.replace(/\n/g, '<br>')
+}
+
+// ── Copy to clipboard ─────────────────────────────────────────────────────────
+let _copyTimer = null
+async function copyMessage(msg) {
+  try {
+    await navigator.clipboard.writeText(msg.text)
+  } catch {
+    const el = Object.assign(document.createElement('textarea'), { value: msg.text })
+    el.style.cssText = 'position:fixed;opacity:0'
+    document.body.appendChild(el); el.select(); document.execCommand('copy')
+    document.body.removeChild(el)
+  }
+  copiedId.value = msg.id
+  clearTimeout(_copyTimer)
+  _copyTimer = setTimeout(() => { copiedId.value = null }, 2000)
+}
+
+// ── Auto-resize textarea ──────────────────────────────────────────────────────
+function autoResize() {
+  const el = inputEl.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = Math.min(el.scrollHeight, 120) + 'px'
+}
+
+// ── Tabs ──────────────────────────────────────────────────────────────────────
+const tabs = computed(() =>
+  Array.from(peersStore.openConversations.entries()).map(([peerId, tab]) => ({
+    peerId,
+    label: tab.label,
+    connected: tab.connected,
+    active: peerId === peersStore.activeTabId,
+    unread: msgsStore.unread.get(peerId) ?? 0,
+  }))
+)
+
+const activeTab = computed(() => {
+  if (!peersStore.activeTabId) return null
+  const tab = peersStore.openConversations.get(peersStore.activeTabId)
+  return tab ? { peerId: peersStore.activeTabId, ...tab } : null
+})
+
+const activeMessages = computed(() => msgsStore.getMessages(peersStore.activeTabId))
+
+const isConnected  = computed(() => activeTab.value?.connected ?? false)
+const canCall      = computed(() => isConnected.value && callStore.callState === 'idle')
+const canScreen    = computed(() => isConnected.value && !callStore.isSharingScreen && !callStore.isViewingScreen)
+const isSharingNow = computed(() => callStore.isSharingScreen)
+
+function switchTab(peerId) {
+  peersStore.setActiveTab(peerId)
+  msgsStore.markRead(peerId)
+  nextTick(() => { if (chatEl.value) chatEl.value.scrollTop = chatEl.value.scrollHeight })
+}
+
+function closeTab(peerId) { closeConversation(peerId) }
+
+// Scroll to bottom + mark read when messages arrive or tab switches
+watch(() => activeMessages.value.length, async () => {
+  await nextTick()
+  if (chatEl.value) chatEl.value.scrollTop = chatEl.value.scrollHeight
+  if (peersStore.activeTabId) msgsStore.markRead(peersStore.activeTabId)
+})
+watch(() => peersStore.activeTabId, async () => {
   await nextTick()
   if (chatEl.value) chatEl.value.scrollTop = chatEl.value.scrollHeight
 })
 
+// ── File handling ─────────────────────────────────────────────────────────────
 function stageFile(e) {
   const f = e.target.files?.[0]
   if (f) stagedFile.value = f
@@ -50,7 +126,12 @@ function fileEmoji(name) {
 async function send() {
   if (!isConnected.value) return
   const text = msgInput.value.trim()
-  if (text) { sendText(text); msgInput.value = '' }
+  if (text) {
+    sendText(text)
+    msgInput.value = ''
+    await nextTick()
+    if (inputEl.value) inputEl.value.style.height = 'auto'
+  }
   if (stagedFile.value) {
     const file = stagedFile.value
     clearStaged()
@@ -64,18 +145,65 @@ async function send() {
 <template>
   <main class="flex-1 flex flex-col overflow-hidden min-w-0">
 
+    <!-- ── Conversation Tabs ── -->
+    <div
+      v-if="tabs.length"
+      class="flex overflow-x-auto flex-shrink-0 bg-slate-50 border-b border-slate-200"
+      style="scrollbar-width: none; -webkit-overflow-scrolling: touch;"
+    >
+      <button
+        v-for="tab in tabs"
+        :key="tab.peerId"
+        @click="switchTab(tab.peerId)"
+        class="relative flex items-center gap-1.5 px-3 py-2.5 text-xs whitespace-nowrap
+               flex-shrink-0 border-b-2 transition-all group"
+        :class="tab.active
+          ? 'border-indigo-500 text-indigo-700 bg-white font-semibold'
+          : tab.unread > 0
+            ? 'border-amber-400 bg-amber-50 text-amber-800 font-medium hover:bg-amber-100'
+            : 'border-transparent text-slate-500 hover:text-slate-700 hover:bg-white/80'"
+      >
+        <!-- Connection status dot -->
+        <span
+          class="w-1.5 h-1.5 rounded-full flex-shrink-0 transition-colors"
+          :class="tab.connected ? 'bg-emerald-500' : 'bg-slate-300'"
+        ></span>
+
+        <!-- Peer name -->
+        <span class="max-w-[90px] truncate">{{ tab.label }}</span>
+
+        <!-- Unread badge — pulsing to grab attention -->
+        <span
+          v-if="tab.unread > 0"
+          class="min-w-[18px] h-[18px] rounded-full bg-red-500 text-white text-[9px] font-bold
+                 flex items-center justify-center px-1 flex-shrink-0 shadow shadow-red-200 animate-pulse"
+        >{{ tab.unread > 99 ? '99+' : tab.unread }}</span>
+
+        <!-- Close button -->
+        <span
+          @click.stop="closeTab(tab.peerId)"
+          class="ml-0.5 w-4 h-4 rounded flex items-center justify-center flex-shrink-0
+                 text-slate-300 group-hover:text-slate-400 hover:!text-red-400 hover:bg-red-50 transition"
+          title="Close conversation"
+        >✕</span>
+      </button>
+    </div>
+
     <!-- ── Connection bar ── -->
-    <div class="px-4 py-2 bg-white border-b border-slate-200 flex items-center gap-2.5 flex-shrink-0">
+    <div
+      v-if="activeTab"
+      class="px-4 py-2 bg-white border-b border-slate-200 flex items-center gap-2.5 flex-shrink-0"
+    >
       <div
         class="w-2 h-2 rounded-full flex-shrink-0 transition-colors duration-300"
         :class="isConnected ? 'bg-emerald-500' : 'bg-slate-300'"
       ></div>
-      <span class="text-slate-500 text-xs">Connected to:</span>
-      <span class="font-semibold text-sm truncate flex-1">
-        {{ peersStore.connectedLabel || 'No one — select a peer' }}
+      <span class="text-slate-500 text-xs flex-shrink-0">
+        {{ isConnected ? 'Connected to:' : 'Disconnected:' }}
       </span>
+      <span class="font-semibold text-sm truncate flex-1">{{ activeTab.label }}</span>
 
-      <!-- Call button — only when connected and idle -->
+      <!-- Call button -->
       <Transition
         enter-active-class="transition-all duration-200"
         enter-from-class="opacity-0 scale-75"
@@ -125,7 +253,7 @@ async function send() {
     <!-- ── Panel body ── -->
     <div class="flex-1 relative flex flex-col overflow-hidden">
 
-      <!-- Empty-state overlay -->
+      <!-- Empty state — no conversations open -->
       <Transition
         enter-active-class="transition-opacity duration-200"
         enter-from-class="opacity-0"
@@ -133,10 +261,9 @@ async function send() {
         leave-to-class="opacity-0"
       >
         <div
-          v-if="!isConnected"
+          v-if="!tabs.length"
           class="absolute inset-0 bg-white/90 backdrop-blur-sm flex flex-col items-center justify-center gap-4 z-10 px-8"
         >
-          <!-- network illustration -->
           <svg class="w-20 h-20 text-indigo-200" viewBox="0 0 80 80" fill="none">
             <circle cx="40" cy="40" r="39" stroke="currentColor" stroke-width="2" stroke-dasharray="6 4"/>
             <circle cx="40" cy="40" r="8" fill="currentColor" class="text-indigo-300"/>
@@ -150,7 +277,7 @@ async function send() {
             <line x1="46" y1="44" x2="58" y2="50" stroke="currentColor" stroke-width="1.5" class="text-indigo-300" stroke-linecap="round"/>
           </svg>
           <div class="text-center">
-            <p class="text-slate-700 font-semibold text-base mb-1">No peer connected</p>
+            <p class="text-slate-700 font-semibold text-base mb-1">No conversations open</p>
             <p class="text-slate-400 text-sm leading-relaxed">
               Pick someone from the peer list<span class="lg:hidden"> — tap <strong>Peers</strong> below</span><span class="hidden lg:inline"> on the left</span> to start chatting
             </p>
@@ -160,22 +287,47 @@ async function send() {
 
       <!-- ── Messages ── -->
       <div ref="chatEl" class="flex-1 overflow-y-auto px-4 py-4 flex flex-col gap-2">
-        <p v-if="!msgsStore.messages.length" class="text-center text-slate-400 text-sm my-auto">
+        <p v-if="activeTab && !activeMessages.length" class="text-center text-slate-400 text-sm my-auto">
           No messages yet. Say hello!
         </p>
 
-        <template v-for="msg in msgsStore.messages" :key="msg.id">
+        <template v-for="msg in activeMessages" :key="msg.id">
 
           <!-- Text bubble -->
           <div
             v-if="msg.type === 'text'"
-            class="max-w-[72%] sm:max-w-[65%] px-3.5 py-2 rounded-2xl text-sm leading-relaxed break-words"
-            :class="msg.local
-              ? 'bg-indigo-500 text-white self-end rounded-br-sm'
-              : 'bg-white border border-slate-200 shadow-sm self-start rounded-bl-sm'"
+            class="flex items-end gap-1.5 group"
+            :class="msg.local ? 'flex-row-reverse self-end' : 'self-start'"
           >
-            <div>{{ msg.text }}</div>
-            <div class="text-[10px] mt-1.5 opacity-60 text-right">{{ msg.time }}</div>
+            <!-- Bubble -->
+            <div
+              class="max-w-[72%] sm:max-w-[65%] px-3.5 py-2 rounded-2xl text-sm leading-relaxed break-words"
+              :class="msg.local
+                ? 'bg-indigo-500 text-white rounded-br-sm'
+                : 'bg-white border border-slate-200 shadow-sm rounded-bl-sm'"
+            >
+              <div v-html="renderText(msg.text)"></div>
+              <div class="text-[10px] mt-1.5 opacity-60 text-right">{{ msg.time }}</div>
+            </div>
+
+            <!-- Copy button — always faintly visible on mobile, appears on hover on desktop -->
+            <button
+              @click.stop="copyMessage(msg)"
+              class="flex-shrink-0 w-6 h-6 rounded-full flex items-center justify-center transition-all
+                     bg-white border border-slate-200 shadow-sm
+                     opacity-40 sm:opacity-0 group-hover:opacity-100 hover:border-indigo-300"
+              :class="copiedId === msg.id ? 'text-emerald-500 border-emerald-300' : 'text-slate-400 hover:text-indigo-500'"
+              :title="copiedId === msg.id ? 'Copied!' : 'Copy message'"
+            >
+              <!-- Copy icon -->
+              <svg v-if="copiedId !== msg.id" class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/>
+              </svg>
+              <!-- Check icon when copied -->
+              <svg v-else class="w-3 h-3" viewBox="0 0 24 24" fill="currentColor">
+                <path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/>
+              </svg>
+            </button>
           </div>
 
           <!-- File bubble -->
@@ -202,7 +354,21 @@ async function send() {
               </div>
               <div class="text-xs opacity-70">{{ msg.progress }}%</div>
             </template>
-            <div v-else class="text-xs opacity-80">{{ msg.doneLabel }}</div>
+            <template v-else>
+              <!-- Manual save button when auto-download is off -->
+              <button
+                v-if="msg.blobUrl"
+                @click="msgsStore.saveFile(activeTab.peerId, msg.id)"
+                class="mt-1 flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-lg transition
+                       bg-white/20 hover:bg-white/30 active:bg-white/40 w-full justify-center"
+              >
+                <svg class="w-3.5 h-3.5" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M19 9h-4V3H9v6H5l7 7 7-7zm-8 2V5h2v6h1.17L12 13.17 9.83 11H11zm-6 7h14v2H5z"/>
+                </svg>
+                Save to Downloads
+              </button>
+              <div v-else class="text-xs opacity-80">{{ msg.doneLabel }}</div>
+            </template>
             <div class="text-[10px] mt-1.5 opacity-60 text-right">{{ msg.time }}</div>
           </div>
 
@@ -237,21 +403,29 @@ async function send() {
 
           <button
             @click="fileInput.click()"
-            class="w-9 h-9 rounded-full border flex items-center justify-center transition flex-shrink-0 text-base"
+            :disabled="!isConnected"
+            class="w-9 h-9 rounded-full border flex items-center justify-center transition flex-shrink-0 text-base
+                   disabled:opacity-40 disabled:cursor-not-allowed"
             :class="stagedFile
               ? 'border-indigo-400 text-indigo-500 bg-indigo-50'
               : 'border-slate-200 text-slate-400 hover:text-indigo-500 hover:border-indigo-300 hover:bg-indigo-50'"
             title="Attach file"
           >📎</button>
 
-          <!-- text-base on mobile prevents iOS auto-zoom on focus -->
-          <input
+          <!-- text-base prevents iOS auto-zoom; Shift+Enter adds newline, Enter sends -->
+          <textarea
+            ref="inputEl"
             v-model="msgInput"
-            placeholder="Type a message…"
+            rows="1"
+            :placeholder="isConnected ? 'Type a message… (Shift+Enter for new line)' : 'Select a peer to start chatting'"
+            :disabled="!isConnected"
             @keydown.enter.exact.prevent="send"
-            class="flex-1 px-4 py-2 border border-slate-200 rounded-full outline-none
+            @input="autoResize"
+            class="flex-1 px-4 py-2 border border-slate-200 rounded-2xl outline-none
                    focus:border-indigo-400 focus:ring-1 focus:ring-indigo-100 transition
-                   text-base sm:text-sm"
+                   text-base sm:text-sm resize-none overflow-hidden leading-relaxed
+                   disabled:bg-slate-50 disabled:text-slate-400 disabled:cursor-not-allowed"
+            style="min-height: 38px;"
           />
 
           <button

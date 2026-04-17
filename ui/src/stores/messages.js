@@ -28,25 +28,56 @@ let _id = 0
 const uid = () => ++_id
 
 export const useMessagesStore = defineStore('messages', () => {
-  const messages = ref([])
+  // Map<peerId, Message[]>
+  const conversations = ref(new Map())
+  // Map<peerId, number>
+  const unread = ref(new Map())
+  // Per-peer in-progress file receive state (not reactive — just tracking)
+  const _recvStates = new Map()
 
-  // In-progress file receive state
-  let recvMeta   = null
-  let recvChunks = []
-  let recvBytes  = 0
-  let recvMsgId  = null
-
-  function addLocalText(text) {
-    messages.value.push({ id: uid(), type: 'text', local: true, text, time: nowTime() })
+  // ── Settings ──────────────────────────────────────────────────────────────
+  const autoDownload = ref(localStorage.getItem('settingAutoDownload') !== 'false')
+  function setAutoDownload(val) {
+    autoDownload.value = val
+    localStorage.setItem('settingAutoDownload', String(val))
   }
 
-  function addRemoteText(text) {
-    messages.value.push({ id: uid(), type: 'text', local: false, text, time: nowTime() })
+  function getMessages(peerId) {
+    return conversations.value.get(peerId) ?? []
   }
 
-  function addLocalFile(name, size) {
+  function markRead(peerId) {
+    if ((unread.value.get(peerId) ?? 0) === 0) return
+    const m = new Map(unread.value)
+    m.set(peerId, 0)
+    unread.value = m
+  }
+
+  function _push(peerId, msg) {
+    const prev = conversations.value.get(peerId) ?? []
+    const m = new Map(conversations.value)
+    m.set(peerId, [...prev, msg])
+    conversations.value = m
+  }
+
+  function _bumpUnread(peerId) {
+    const m = new Map(unread.value)
+    m.set(peerId, (m.get(peerId) ?? 0) + 1)
+    unread.value = m
+  }
+
+  function addLocalText(peerId, text) {
+    _push(peerId, { id: uid(), type: 'text', local: true, text, time: nowTime() })
+  }
+
+  function addRemoteText(peerId, text) {
+    _push(peerId, { id: uid(), type: 'text', local: false, text, time: nowTime() })
+    _bumpUnread(peerId)
+  }
+
+  function addLocalFile(peerId, name, size) {
     const id = uid()
-    messages.value.push({
+    _push(peerId, {
       id, type: 'file', local: true,
       name, size, emoji: fileEmoji(name), sizeLabel: fmtBytes(size),
       progress: 0, done: false, doneLabel: '', time: nowTime(),
@@ -54,64 +85,117 @@ export const useMessagesStore = defineStore('messages', () => {
     return id
   }
 
-  function onFileStart(meta) {
+  function onFileStart(peerId, meta) {
     const id = uid()
-    recvMeta   = { name: meta.name, size: meta.size, fileType: meta.fileType }
-    recvChunks = []
-    recvBytes  = 0
-    recvMsgId  = id
-    messages.value.push({
+    _recvStates.set(peerId, {
+      meta: { name: meta.name, size: meta.size, fileType: meta.fileType },
+      chunks: [], bytes: 0, msgId: id,
+    })
+    _push(peerId, {
       id, type: 'file', local: false,
       name: meta.name, size: meta.size,
       emoji: fileEmoji(meta.name), sizeLabel: fmtBytes(meta.size),
       progress: 0, done: false, doneLabel: '', time: nowTime(),
     })
+    _bumpUnread(peerId)
   }
 
-  function onChunk(buf) {
-    if (!recvMeta) return
-    recvChunks.push(buf)
-    recvBytes += buf.byteLength
-    const pct = Math.min(100, Math.round((recvBytes / recvMeta.size) * 100))
-    _updateProgress(recvMsgId, pct)
+  function onChunk(peerId, buf) {
+    const state = _recvStates.get(peerId)
+    if (!state) return
+    state.chunks.push(buf)
+    state.bytes += buf.byteLength
+    const pct = Math.min(100, Math.round((state.bytes / state.meta.size) * 100))
+    _updateProgress(peerId, state.msgId, pct)
   }
 
-  function onFileEnd() {
-    if (!recvMeta) return
-    const blob = new Blob(recvChunks, { type: recvMeta.fileType || 'application/octet-stream' })
-    const name = recvMeta.name
-    _finalize(recvMsgId, '✓ Saved to Downloads')
-    _autoDownload(blob, name)
-    recvMeta = null; recvChunks = []; recvBytes = 0; recvMsgId = null
+  function onFileEnd(peerId) {
+    const state = _recvStates.get(peerId)
+    if (!state) return
+    const blob = new Blob(state.chunks, { type: state.meta.fileType || 'application/octet-stream' })
+    const name = state.meta.name
+    if (autoDownload.value) {
+      _finalize(peerId, state.msgId, '✓ Saved to Downloads')
+      _autoDownload(blob, name)
+    } else {
+      // Store blob URL on the message so user can save manually
+      const blobUrl = URL.createObjectURL(blob)
+      _finalizeWithBlob(peerId, state.msgId, blobUrl, name)
+    }
+    _recvStates.delete(peerId)
   }
 
-  function updateFileProgress(id, pct) { _updateProgress(id, pct) }
-  function finalizeFile(id, label)      { _finalize(id, label) }
+  function saveFile(peerId, msgId) {
+    const msgs = conversations.value.get(peerId)
+    if (!msgs) return
+    const m = msgs.find(m => m.id === msgId)
+    if (!m?.blobUrl) return
+    _autoDownload_url(m.blobUrl, m.name)
+    // revoke and clear after save
+    setTimeout(() => URL.revokeObjectURL(m.blobUrl), 10_000)
+    const nm = conversations.value.get(peerId)
+    const idx = nm.findIndex(x => x.id === msgId)
+    if (idx !== -1) { nm[idx] = { ...nm[idx], blobUrl: null, doneLabel: '✓ Saved to Downloads' } }
+  }
 
-  function _updateProgress(id, pct) {
-    const m = messages.value.find(m => m.id === id)
+  function updateFileProgress(peerId, id, pct) { _updateProgress(peerId, id, pct) }
+  function finalizeFile(peerId, id, label)      { _finalize(peerId, id, label) }
+
+  function _updateProgress(peerId, id, pct) {
+    const msgs = conversations.value.get(peerId)
+    if (!msgs) return
+    const m = msgs.find(m => m.id === id)
     if (m) m.progress = pct
   }
 
-  function _finalize(id, label) {
-    const m = messages.value.find(m => m.id === id)
+  function _finalize(peerId, id, label) {
+    const msgs = conversations.value.get(peerId)
+    if (!msgs) return
+    const m = msgs.find(m => m.id === id)
     if (m) { m.done = true; m.doneLabel = label; m.progress = 100 }
+  }
+
+  function _finalizeWithBlob(peerId, id, blobUrl, name) {
+    const msgs = conversations.value.get(peerId)
+    if (!msgs) return
+    const m = msgs.find(m => m.id === id)
+    if (m) { m.done = true; m.doneLabel = ''; m.progress = 100; m.blobUrl = blobUrl; m.name = name }
   }
 
   function _autoDownload(blob, name) {
     const url = URL.createObjectURL(blob)
-    const a   = Object.assign(document.createElement('a'), { href: url, download: name })
+    _autoDownload_url(url, name)
+    setTimeout(() => URL.revokeObjectURL(url), 10_000)
+  }
+
+  function _autoDownload_url(url, name) {
+    const a = Object.assign(document.createElement('a'), { href: url, download: name })
     a.style.display = 'none'
     document.body.appendChild(a)
     a.click()
     document.body.removeChild(a)
-    setTimeout(() => URL.revokeObjectURL(url), 10_000)
+  }
+
+  function clearConversation(peerId) {
+    // Revoke any pending blob URLs to avoid memory leaks
+    const msgs = conversations.value.get(peerId) ?? []
+    msgs.forEach(m => { if (m.blobUrl) URL.revokeObjectURL(m.blobUrl) })
+    const m = new Map(conversations.value)
+    m.delete(peerId)
+    conversations.value = m
+    const u = new Map(unread.value)
+    u.delete(peerId)
+    unread.value = u
+    _recvStates.delete(peerId)
   }
 
   return {
-    messages,
+    conversations, unread,
+    autoDownload, setAutoDownload,
+    getMessages, markRead,
     addLocalText, addRemoteText,
     addLocalFile, onFileStart, onChunk, onFileEnd,
     updateFileProgress, finalizeFile,
+    saveFile, clearConversation,
   }
 })

@@ -98,85 +98,78 @@ const ecoBadges = ['💧 No water wasted', '⚡ No idle electricity', '🗑️ N
 
             <!-- ── Scrollable body ── -->
             <div class="overflow-y-auto flex-1">
-              <div class="px-5 sm:px-8 pt-5 sm:pt-7 pb-6 sm:pb-8">
+              <div class="px-5 sm:px-8 pt-5 sm:pt-6 pb-4">
 
-                <p class="text-slate-500 text-sm leading-relaxed text-center mb-5 sm:mb-6">
+                <p class="text-slate-500 text-sm leading-relaxed text-center mb-4 sm:mb-5">
                   Share files and messages with anyone on your Wi-Fi — without touching the internet.
                   Your data stays between you and the person you're talking to. Always.
                 </p>
 
                 <!-- Feature grid -->
-                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2.5 sm:gap-3 mb-4 sm:mb-5">
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-2.5 mb-3">
                   <div
                     v-for="f in features"
                     :key="f.title"
-                    class="flex gap-3 items-start bg-slate-50 border border-slate-200 rounded-xl p-3 sm:p-3.5
+                    class="flex gap-2.5 items-start bg-slate-50 border border-slate-200 rounded-xl p-2.5
                            hover:border-indigo-300 hover:shadow-sm transition-all"
                   >
-                    <span class="text-xl sm:text-2xl flex-shrink-0 mt-0.5" aria-hidden="true">{{ f.icon }}</span>
+                    <span class="text-lg flex-shrink-0 mt-0.5" aria-hidden="true">{{ f.icon }}</span>
                     <div>
                       <strong class="text-xs font-bold text-slate-700 block">{{ f.title }}</strong>
-                      <span class="text-xs text-slate-500 leading-relaxed mt-0.5 block">{{ f.body }}</span>
+                      <span class="text-[11px] text-slate-500 leading-relaxed mt-0.5 block">{{ f.body }}</span>
                     </div>
                   </div>
 
-                  <!-- Eco card — full width -->
-                  <div class="sm:col-span-2 bg-gradient-to-br from-green-50 via-emerald-50 to-teal-50
-                              border-2 border-green-300 rounded-xl p-4 sm:p-5
-                              hover:border-green-400 hover:shadow-sm transition-all">
-                    <div class="flex flex-col items-center text-center gap-3">
-                      <span class="text-4xl animate-eco-pulse" aria-hidden="true">🌍</span>
-                      <div>
-                        <strong class="text-sm sm:text-base font-extrabold text-green-900 block mb-1.5">
-                          You're literally saving the planet
-                        </strong>
-                        <p class="text-xs text-green-800 leading-relaxed">
-                          Every file sent here skips the data center entirely. Data centers burn through
-                          <strong class="text-green-900">hundreds of billions of litres of water</strong> and
-                          <strong class="text-green-900">hundreds of terawatt-hours of electricity</strong>
-                          every year — just to store files that sit on servers forever.
-                          Peer-to-peer means your data lives nowhere except the two devices talking to each other.
-                          No idle servers. No permanent copies. The planet thanks you.
+                  <!-- Eco card — compact full-width strip -->
+                  <div class="sm:col-span-2 bg-gradient-to-r from-green-50 to-emerald-50
+                              border border-green-300 rounded-xl p-3
+                              hover:border-green-400 transition-all">
+                    <div class="flex items-center gap-3">
+                      <span class="text-2xl flex-shrink-0 animate-eco-pulse" aria-hidden="true">🌍</span>
+                      <div class="flex-1 min-w-0">
+                        <strong class="text-xs font-extrabold text-green-900 block">You're saving the planet</strong>
+                        <p class="text-[11px] text-green-800 leading-relaxed mt-0.5">
+                          P2P skips data centers entirely — no water, no idle electricity, no permanent copies.
                         </p>
                       </div>
-                      <div class="flex flex-wrap gap-1.5 sm:gap-2 justify-center">
+                      <div class="hidden sm:flex flex-col gap-1 flex-shrink-0">
                         <span
                           v-for="b in ecoBadges"
                           :key="b"
-                          class="bg-white/80 border border-green-300 text-green-800 text-[10px] sm:text-xs font-bold px-2.5 sm:px-3 py-1 rounded-full"
+                          class="bg-white/80 border border-green-300 text-green-800 text-[9px] font-bold px-2 py-0.5 rounded-full whitespace-nowrap"
                         >{{ b }}</span>
                       </div>
                     </div>
                   </div>
                 </div>
 
-                <!-- Footer -->
-                <div class="border-t border-slate-100 pt-5 flex flex-col items-center gap-3">
-                  <p class="text-xs text-slate-400">Got a question or found a bug?</p>
+                <!-- Footer link -->
+                <div class="flex justify-center pt-1 pb-2">
                   <a
                     href="https://github.com/manishdalal2/peerjs-server-byip/issues"
                     target="_blank"
                     rel="noopener noreferrer"
-                    class="inline-flex items-center gap-2 bg-slate-900 hover:bg-slate-700
-                           text-white text-xs sm:text-sm font-semibold px-4 py-2.5 rounded-lg
-                           transition hover:-translate-y-0.5"
+                    class="inline-flex items-center gap-1.5 text-slate-400 hover:text-slate-600 text-xs transition"
                   >
-                    <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
                       <path d="M12 0C5.37 0 0 5.37 0 12c0 5.31 3.435 9.795 8.205 11.385.6.105.825-.255.825-.57 0-.285-.015-1.23-.015-2.235-3.015.555-3.795-.735-4.035-1.41-.135-.345-.72-1.41-1.23-1.695-.42-.225-1.02-.78-.015-.795.945-.015 1.62.87 1.845 1.23 1.08 1.815 2.805 1.305 3.495.99.105-.78.42-1.305.765-1.605-2.67-.3-5.46-1.335-5.46-5.925 0-1.305.465-2.385 1.23-3.225-.12-.3-.54-1.53.12-3.18 0 0 1.005-.315 3.3 1.23.96-.27 1.98-.405 3-.405s2.04.135 3 .405c2.295-1.56 3.3-1.23 3.3-1.23.66 1.65.24 2.88.12 3.18.765.84 1.23 1.905 1.23 3.225 0 4.605-2.805 5.625-5.475 5.925.435.375.81 1.095.81 2.22 0 1.605-.015 2.895-.015 3.3 0 .315.225.69.825.57A12.02 12.02 0 0 0 24 12c0-6.63-5.37-12-12-12z"/>
                     </svg>
-                    Open an issue on GitHub
+                    Got a question or found a bug? Open an issue on GitHub
                   </a>
-
-                  <button
-                    @click="hide"
-                    class="bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold
-                           px-10 py-3 rounded-full text-sm shadow-lg shadow-indigo-200/60
-                           hover:opacity-90 hover:-translate-y-0.5 active:translate-y-0
-                           transition w-full max-w-xs"
-                  >Get Started →</button>
                 </div>
 
               </div>
+            </div>
+
+            <!-- ── Sticky Get Started button — always visible at bottom ── -->
+            <div class="flex-shrink-0 px-5 sm:px-8 py-4 bg-white border-t border-slate-100">
+              <button
+                @click="hide"
+                class="bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-bold
+                       px-10 py-3 rounded-full text-sm shadow-lg shadow-indigo-200/60
+                       hover:opacity-90 hover:-translate-y-0.5 active:translate-y-0
+                       transition w-full"
+              >Get Started →</button>
             </div>
 
           </div>

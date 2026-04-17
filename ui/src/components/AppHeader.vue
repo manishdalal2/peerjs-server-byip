@@ -2,7 +2,7 @@
 import { computed } from 'vue'
 import { usePeersStore } from '../stores/peers.js'
 
-defineProps({ sidebarOpen: Boolean, forceOverlay: Boolean })
+defineProps({ sidebarOpen: Boolean, forceOverlay: Boolean, totalUnread: { type: Number, default: 0 } })
 defineEmits(['open-about', 'toggle-sidebar'])
 
 const peers = usePeersStore()
@@ -18,11 +18,18 @@ const shortId = computed(() =>
       <!-- Hamburger — mobile and portrait screens, opens peer list sidebar -->
       <button
         @click="$emit('toggle-sidebar')"
-        class="w-9 h-9 rounded-lg flex flex-col items-center justify-center gap-1.5
+        class="relative w-9 h-9 rounded-lg flex flex-col items-center justify-center gap-1.5
                hover:bg-white/15 active:bg-white/25 transition-colors flex-shrink-0"
         :class="[sidebarOpen ? 'bg-white/20' : '', forceOverlay ? '' : 'lg:hidden']"
         aria-label="Toggle peer list"
       >
+        <!-- Unread notification badge on hamburger (shown when sidebar is closed) -->
+        <span
+          v-if="!sidebarOpen && totalUnread > 0"
+          class="absolute -top-1 -right-1 min-w-[16px] h-4 rounded-full bg-red-500 text-white
+                 text-[8px] font-bold flex items-center justify-center px-0.5
+                 ring-2 ring-indigo-500 animate-pulse pointer-events-none"
+        >{{ totalUnread > 9 ? '9+' : totalUnread }}</span>
         <span
           class="block w-5 h-0.5 bg-white rounded-full transition-all duration-200"
           :class="sidebarOpen ? 'rotate-45 translate-y-2' : ''"

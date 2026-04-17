@@ -1,11 +1,13 @@
 <script setup>
 import { ref, computed } from 'vue'
-import { usePeersStore } from '../stores/peers.js'
+import { usePeersStore }    from '../stores/peers.js'
+import { useMessagesStore } from '../stores/messages.js'
 import { usePeer } from '../composables/usePeer.js'
 
 const emit = defineEmits(['peer-selected'])
 
 const peersStore = usePeersStore()
+const msgsStore  = useMessagesStore()
 const { connectTo, sendProfileUpdate } = usePeer()
 
 const refreshing = ref(false)
@@ -99,14 +101,25 @@ function connectManual() {
         :key="p.id"
         @click="handlePeerClick(p)"
         class="w-full text-left px-3 py-2.5 rounded-xl mb-1 border transition-all"
-        :class="peersStore.connectedId === p.id
-          ? 'bg-indigo-50 border-indigo-400 shadow-sm'
+        :class="peersStore.openConversations.has(p.id)
+          ? (peersStore.openConversations.get(p.id)?.connected
+              ? 'bg-emerald-50 border-emerald-200 shadow-sm'
+              : 'bg-amber-50 border-amber-200')
           : 'border-transparent hover:bg-indigo-50 hover:border-indigo-200'"
       >
         <div class="font-semibold text-sm truncate">{{ p.displayName || p.alias || 'Unknown' }}</div>
         <div class="text-[10px] text-slate-400 font-mono mt-0.5 truncate">{{ p.id }}</div>
-        <div class="text-[10px] font-bold mt-1" :class="p.hasPin ? 'text-amber-500' : 'text-emerald-500'">
-          ● {{ p.hasPin ? 'PIN required' : 'Available' }}
+        <div class="text-[10px] font-bold mt-1"
+          :class="peersStore.openConversations.has(p.id)
+            ? (peersStore.openConversations.get(p.id)?.connected ? 'text-emerald-600' : 'text-amber-500')
+            : (p.hasPin ? 'text-amber-500' : 'text-emerald-500')"
+        >
+          <template v-if="peersStore.openConversations.has(p.id)">
+            ● {{ peersStore.openConversations.get(p.id)?.connected ? 'Chat open' : 'Reconnect' }}
+          </template>
+          <template v-else>
+            ● {{ p.hasPin ? 'PIN required' : 'Available' }}
+          </template>
         </div>
       </button>
     </div>
@@ -128,6 +141,36 @@ function connectManual() {
                  text-white font-bold rounded-lg transition flex-shrink-0"
         >Go</button>
       </div>
+    </div>
+
+    <!-- ── Settings ── -->
+    <div class="p-3 border-t border-slate-200 flex-shrink-0">
+      <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2.5">Settings</div>
+
+      <!-- Auto-save files toggle -->
+      <label class="flex items-center justify-between gap-3 cursor-pointer group">
+        <div class="min-w-0">
+          <div class="text-xs font-medium text-slate-700 group-hover:text-slate-900 transition">Auto-save received files</div>
+          <div class="text-[10px] text-slate-400 mt-0.5">
+            {{ msgsStore.autoDownload ? 'Files saved automatically' : 'Tap "Save" on each file' }}
+          </div>
+        </div>
+        <!-- Toggle switch -->
+        <button
+          type="button"
+          role="switch"
+          :aria-checked="msgsStore.autoDownload"
+          @click="msgsStore.setAutoDownload(!msgsStore.autoDownload)"
+          class="relative w-9 h-5 rounded-full transition-colors flex-shrink-0 focus:outline-none
+                 focus:ring-2 focus:ring-indigo-400 focus:ring-offset-1"
+          :class="msgsStore.autoDownload ? 'bg-indigo-500' : 'bg-slate-300'"
+        >
+          <span
+            class="absolute top-0.5 left-0.5 w-4 h-4 bg-white rounded-full shadow transition-transform duration-200"
+            :class="msgsStore.autoDownload ? 'translate-x-4' : 'translate-x-0'"
+          ></span>
+        </button>
+      </label>
     </div>
 
   </aside>

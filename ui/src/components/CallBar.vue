@@ -1,11 +1,9 @@
 <script setup>
 import { ref, computed, watch } from 'vue'
 import { useCallStore } from '../stores/call.js'
-import { usePeersStore } from '../stores/peers.js'
-import { usePeer }       from '../composables/usePeer.js'
+import { usePeer }      from '../composables/usePeer.js'
 
-const callStore  = useCallStore()
-const peersStore = usePeersStore()
+const callStore = useCallStore()
 const { cancelCall, endCall, toggleMute, startScreenShare, stopScreenShare } = usePeer()
 
 const remoteAudioEl = ref(null)
@@ -21,7 +19,7 @@ watch(() => callStore.remoteStream, stream => {
 const isRingingOut = computed(() => callStore.callState === 'ringing-out')
 const isInCall     = computed(() => callStore.callState === 'in-call')
 const visible      = computed(() => isRingingOut.value || isInCall.value)
-const peerName     = computed(() => peersStore.connectedLabel || 'Peer')
+const peerName     = computed(() => callStore.callerName || 'Peer')
 </script>
 
 <template>

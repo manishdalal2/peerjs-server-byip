@@ -1,5 +1,5 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import AppHeader    from './components/AppHeader.vue'
 import PeerList     from './components/PeerList.vue'
 import ChatPanel    from './components/ChatPanel.vue'
@@ -7,13 +7,19 @@ import WelcomeModal from './components/WelcomeModal.vue'
 import CallBar      from './components/CallBar.vue'
 import IncomingCall from './components/IncomingCall.vue'
 import ScreenShare  from './components/ScreenShare.vue'
-import { usePeersStore } from './stores/peers.js'
-import { usePeer }       from './composables/usePeer.js'
-import { useAudio }      from './composables/useAudio.js'
+import { usePeersStore }    from './stores/peers.js'
+import { useMessagesStore } from './stores/messages.js'
+import { usePeer }          from './composables/usePeer.js'
+import { useAudio }         from './composables/useAudio.js'
 
 const peersStore = usePeersStore()
+const msgsStore  = useMessagesStore()
 const { init, destroy } = usePeer()
 const { primeAudio }    = useAudio()
+
+const totalUnread = computed(() =>
+  Array.from(msgsStore.unread.values()).reduce((sum, n) => sum + n, 0)
+)
 
 const welcomeModal = ref(null)
 const sidebarOpen  = ref(false)
@@ -63,7 +69,7 @@ onUnmounted(() => {
     class="flex flex-col bg-slate-100 overflow-hidden"
     style="height: 100vh; height: calc(var(--vh, 1vh) * 100);"
   >
-    <AppHeader :sidebar-open="sidebarOpen" :force-overlay="isPortrait" @open-about="openAbout" @toggle-sidebar="sidebarOpen = !sidebarOpen" />
+    <AppHeader :sidebar-open="sidebarOpen" :force-overlay="isPortrait" :total-unread="totalUnread" @open-about="openAbout" @toggle-sidebar="sidebarOpen = !sidebarOpen" />
 
     <div class="flex flex-1 overflow-hidden relative">
 
