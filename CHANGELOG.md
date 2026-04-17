@@ -1,3 +1,11 @@
+# [1.9.0](https://github.com/manishdalal2/peerjs-server-byip/compare/v1.8.0...v1.9.0) (2026-04-17)
+
+
+### Features
+
+* [Risky] enhance connection handling and persist peer ID across refreshes ([cbcfd77](https://github.com/manishdalal2/peerjs-server-byip/commit/cbcfd7742ff34bf8a2c8db5c3ed327bbe7aa8a7b))
+* add SEO enhancements with canonical link, Open Graph, and Twitter Card metadata ([b55db85](https://github.com/manishdalal2/peerjs-server-byip/commit/b55db85ec7e1dd87a52a6a817a6d050b12a26ec5))
+
 # [1.8.0](https://github.com/manishdalal2/peerjs-server-byip/compare/v1.7.0...v1.8.0) (2026-04-11)
 
 
