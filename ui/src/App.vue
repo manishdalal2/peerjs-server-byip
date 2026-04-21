@@ -1,12 +1,14 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
-import AppHeader    from './components/AppHeader.vue'
-import PeerList     from './components/PeerList.vue'
-import ChatPanel    from './components/ChatPanel.vue'
-import WelcomeModal from './components/WelcomeModal.vue'
-import CallBar      from './components/CallBar.vue'
-import IncomingCall from './components/IncomingCall.vue'
-import ScreenShare  from './components/ScreenShare.vue'
+import AppHeader        from './components/AppHeader.vue'
+import PeerList         from './components/PeerList.vue'
+import ChatPanel        from './components/ChatPanel.vue'
+import WelcomeModal     from './components/WelcomeModal.vue'
+import CallBar          from './components/CallBar.vue'
+import IncomingCall     from './components/IncomingCall.vue'
+import ScreenShare      from './components/ScreenShare.vue'
+import ShareTargetModal from './components/ShareTargetModal.vue'
+import { useShareTarget } from './composables/useShareTarget.js'
 import { usePeersStore }    from './stores/peers.js'
 import { useMessagesStore } from './stores/messages.js'
 import { usePeer }          from './composables/usePeer.js'
@@ -14,6 +16,7 @@ import { useAudio }         from './composables/useAudio.js'
 
 const peersStore = usePeersStore()
 const msgsStore  = useMessagesStore()
+const { sharedFiles, clearSharedFiles } = useShareTarget()
 const { init, destroy } = usePeer()
 const { primeAudio }    = useAudio()
 
@@ -114,5 +117,6 @@ onUnmounted(() => {
   <IncomingCall />
   <CallBar />
   <ScreenShare />
+  <ShareTargetModal v-if="sharedFiles.length > 0" :files="sharedFiles" @close="clearSharedFiles" />
 
 </template>

@@ -6,6 +6,9 @@ export default defineConfig({
   plugins: [
     vue(),
     VitePWA({
+      strategies: 'injectManifest',
+      srcDir: 'src',
+      filename: 'sw.js',
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'icon.svg', 'apple-touch-icon-180x180.png', 'caller.mp3', 'ring.mp3', 'ringtone.mp3'],
       manifest: {
@@ -19,46 +22,41 @@ export default defineConfig({
         scope: '/',
         start_url: '/',
         icons: [
-          {
-            src: 'pwa-192x192.png',
-            sizes: '192x192',
-            type: 'image/png'
-          },
-          {
-            src: 'pwa-512x512.png',
-            sizes: '512x512',
-            type: 'image/png'
-          },
-          {
-            src: 'maskable-icon-512x512.png',
-            sizes: '512x512',
-            type: 'image/png',
-            purpose: 'maskable'
-          }
+          { src: 'pwa-192x192.png',        sizes: '192x192', type: 'image/png' },
+          { src: 'pwa-512x512.png',        sizes: '512x512', type: 'image/png' },
+          { src: 'maskable-icon-512x512.png', sizes: '512x512', type: 'image/png', purpose: 'maskable' }
         ],
-        categories: ['utilities', 'productivity', 'social']
-      },
-      workbox: {
-        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,mp3}'],
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/fonts\.googleapis\.com\/.*/i,
-            handler: 'CacheFirst',
-            options: {
-              cacheName: 'google-fonts-cache',
-              expiration: {
-                maxEntries: 10,
-                maxAgeSeconds: 60 * 60 * 24 * 365 // 1 year
-              },
-              cacheableResponse: {
-                statuses: [0, 200]
-              }
-            }
+        categories: ['utilities', 'productivity', 'social'],
+        share_target: {
+          action: '/share',
+          method: 'POST',
+          enctype: 'multipart/form-data',
+          params: {
+            title: 'title',
+            text:  'text',
+            url:   'url',
+            files: [{
+              name:   'files',
+              accept: [
+                'image/*', 'video/*', 'audio/*',
+                'application/pdf', '.pdf',
+                'application/zip', 'application/x-zip-compressed', '.zip',
+                'application/octet-stream',
+                'application/msword', 'application/vnd.openxmlformats-officedocument.wordprocessingml.document', '.doc', '.docx',
+                'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', '.xls', '.xlsx',
+                'application/vnd.ms-powerpoint', 'application/vnd.openxmlformats-officedocument.presentationml.presentation', '.ppt', '.pptx',
+                'text/*', '.txt', '.csv',
+              ]
+            }]
           }
-        ]
+        }
+      },
+      injectManifest: {
+        globPatterns: ['**/*.{js,css,html,ico,png,svg,woff,woff2,mp3}'],
       },
       devOptions: {
-        enabled: true // Enable PWA in development mode for testing
+        enabled: true,
+        type: 'module',
       }
     })
   ],
@@ -69,7 +67,6 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      // Proxy all PeerJS HTTP + WebSocket traffic to the Node server in dev
       '/peerjs': {
         target: 'http://localhost:9000',
         ws: true,

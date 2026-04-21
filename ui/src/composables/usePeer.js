@@ -386,9 +386,8 @@ export function usePeer() {
     msgsStore.addLocalText(peerId, text)
   }
 
-  async function sendFile(file) {
-    const peerId = peersStore.activeTabId
-    const conn   = _connFor(peerId)
+  async function sendFile(file, peerId = peersStore.activeTabId) {
+    const conn = _connFor(peerId)
     if (!conn?.open) return
     const msgId = msgsStore.addLocalFile(peerId, file.name, file.size)
     conn.send(JSON.stringify({ type: 'file-start', name: file.name, size: file.size, fileType: file.type }))

@@ -19,6 +19,10 @@ app.get("/", (_req, res) => {
 	res.sendFile(path.join(__dirname, "public", "index.html"));
 });
 
+// Defensive fallback for POST /share — in normal operation the service worker
+// intercepts this before it reaches Express. This handles the SW-not-yet-installed case.
+app.post("/share", (_req, res) => res.redirect(303, "/"));
+
 const server = http.createServer(app);
 
 const peerServer = ExpressPeerServer(server, {
