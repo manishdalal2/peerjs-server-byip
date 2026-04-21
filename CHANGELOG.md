@@ -1,3 +1,15 @@
+# [1.10.0](https://github.com/manishdalal2/peerjs-server-byip/compare/v1.9.0...v1.10.0) (2026-04-21)
+
+
+### Bug Fixes
+
+* update orientation setting in Vite config to allow any orientation ([e3f7089](https://github.com/manishdalal2/peerjs-server-byip/commit/e3f708901693b12a4d89fd31abea82f14b8b6bf3))
+
+
+### Features
+
+* implement Web Share Target for Android not IOS functionality with service worker integration and file caching ([70f556c](https://github.com/manishdalal2/peerjs-server-byip/commit/70f556c510199979c4e2af1199ff31f1aa078463))
+
 # [1.9.0](https://github.com/manishdalal2/peerjs-server-byip/compare/v1.8.0...v1.9.0) (2026-04-17)
 
 
