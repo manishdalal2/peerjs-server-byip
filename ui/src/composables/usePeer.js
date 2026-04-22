@@ -422,10 +422,13 @@ export function usePeer() {
       localStorage.setItem(PEER_ID_KEY, savedId)
     }
 
+    const stunUrl    = localStorage.getItem('stun')
+    const iceServers = stunUrl ? [{ urls: stunUrl }] : []
+
     peerInstance = new Peer(savedId, {
       host, port, path: '/', key: 'peerjs',
       secure: window.location.protocol === 'https:',
-      config: { iceServers: [] },
+      config: { iceServers },
     })
 
     peerInstance.on('open', id => {
