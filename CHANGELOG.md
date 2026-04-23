@@ -1,3 +1,10 @@
+# [1.12.0](https://github.com/manishdalal2/peerjs-server-byip/compare/v1.11.0...v1.12.0) (2026-04-23)
+
+
+### Features
+
+* implement STUN-based PIN requirement for external connections and add Zoryn advertisement component ([5941c29](https://github.com/manishdalal2/peerjs-server-byip/commit/5941c2968760b7ae98ea14d08eada692bcec2e0a))
+
 # [1.11.0](https://github.com/manishdalal2/peerjs-server-byip/compare/v1.10.0...v1.11.0) (2026-04-23)
 
 
