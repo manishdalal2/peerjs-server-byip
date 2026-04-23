@@ -185,6 +185,10 @@ export function usePeer() {
 
   // ── Screen share — start (sharer side) ───────────────────────────────────
   async function startScreenShare() {
+    if (!navigator.mediaDevices?.getDisplayMedia) {
+      peersStore.setStatus('Screen sharing is not supported on this device or browser')
+      return
+    }
     const peerId = peersStore.activeTabId
     const conn   = _connFor(peerId)
     if (!conn?.open) { peersStore.setStatus('Connect to a peer before sharing'); return }
@@ -355,6 +359,13 @@ export function usePeer() {
     let trimmedPin = peerPins.get(peerId) || suppliedPin || ''
     const isExternal = !peersStore.availPeers.has(peerId)
     const stunEnabled = !!localStorage.getItem('stun')
+
+    // External connections via STUN require the local user to have a PIN configured.
+    // This prevents anyone from using STUN to reach external peers without securing their own endpoint.
+    if (stunEnabled && isExternal && !peersStore.pin) {
+      peersStore.setStatus('Set a PIN in your profile before connecting to external peers')
+      return
+    }
 
     // PIN is mandatory for cross-network connections (STUN active + peer not on local network)
     if (stunEnabled && isExternal && !trimmedPin) {

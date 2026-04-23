@@ -81,7 +81,8 @@ const activeMessages = computed(() => msgsStore.getMessages(peersStore.activeTab
 
 const isConnected  = computed(() => activeTab.value?.connected ?? false)
 const canCall      = computed(() => isConnected.value && callStore.callState === 'idle')
-const canScreen    = computed(() => isConnected.value && !callStore.isSharingScreen && !callStore.isViewingScreen)
+const supportsScreenShare = !!navigator.mediaDevices?.getDisplayMedia
+const canScreen    = computed(() => supportsScreenShare && isConnected.value && !callStore.isSharingScreen && !callStore.isViewingScreen)
 const isSharingNow = computed(() => callStore.isSharingScreen)
 
 function switchTab(peerId) {
