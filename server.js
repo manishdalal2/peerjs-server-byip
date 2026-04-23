@@ -31,6 +31,10 @@ const peerServer = ExpressPeerServer(server, {
 	corsOptions: { origin: true },
 });
 
+// Block the global peer list — not used by the app and exposes all connected peer IDs.
+// /by-ip is still available (same-network discovery) and /groups is token-protected.
+app.get("/peerjs/peers", (_req, res) => res.sendStatus(404));
+
 app.use(peerServer);
 
 server.listen(port, () => {

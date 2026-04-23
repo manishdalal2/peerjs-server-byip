@@ -8,6 +8,7 @@ import CallBar          from './components/CallBar.vue'
 import IncomingCall     from './components/IncomingCall.vue'
 import ScreenShare      from './components/ScreenShare.vue'
 import ShareTargetModal from './components/ShareTargetModal.vue'
+import ZorynAd          from './components/ZorynAd.vue'
 import { useShareTarget } from './composables/useShareTarget.js'
 import { usePeersStore }    from './stores/peers.js'
 import { useMessagesStore } from './stores/messages.js'
@@ -27,6 +28,7 @@ const totalUnread = computed(() =>
 const welcomeModal = ref(null)
 const sidebarOpen  = ref(false)
 const isPortrait   = ref(window.matchMedia('(orientation: portrait)').matches)
+const stunActive   = ref(!!localStorage.getItem('stun'))
 
 let orientationMq      = null
 let orientationHandler = null
@@ -105,6 +107,15 @@ onUnmounted(() => {
       <ChatPanel />
     </div>
 
+    <!-- Cross-network warning bar (shown when STUN is configured) -->
+    <div
+      v-if="stunActive"
+      class="bg-amber-500 text-white px-4 py-0.5 text-[11px] flex-shrink-0 flex items-center gap-1.5"
+    >
+      <span>&#9888;</span>
+      <span class="truncate">External network mode active — connections may go outside your local Wi-Fi</span>
+    </div>
+
     <!-- Status bar -->
     <div class="bg-slate-800 text-slate-400 px-4 py-0.5 text-[11px] truncate flex-shrink-0 h-6">
       {{ peersStore.statusText }}
@@ -118,5 +129,6 @@ onUnmounted(() => {
   <CallBar />
   <ScreenShare />
   <ShareTargetModal v-if="sharedFiles.length > 0" :files="sharedFiles" @close="clearSharedFiles" />
+  <ZorynAd />
 
 </template>

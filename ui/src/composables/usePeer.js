@@ -353,7 +353,15 @@ export function usePeer() {
 
     // Priority: already-stored PIN > caller-supplied PIN > prompt if hasPin
     let trimmedPin = peerPins.get(peerId) || suppliedPin || ''
-    if (!trimmedPin && hasPin) {
+    const isExternal = !peersStore.availPeers.has(peerId)
+    const stunEnabled = !!localStorage.getItem('stun')
+
+    // PIN is mandatory for cross-network connections (STUN active + peer not on local network)
+    if (stunEnabled && isExternal && !trimmedPin) {
+      const pin = window.prompt(`PIN is required for external connections.\nEnter PIN for ${alias || peerId}:`)
+      if (!pin?.trim()) { peersStore.setStatus('PIN required for external network connections'); return }
+      trimmedPin = pin.trim()
+    } else if (!trimmedPin && hasPin) {
       const pin = window.prompt(`Enter PIN for ${alias || peerId}`)
       if (pin === null) { peersStore.setStatus('Connection cancelled'); return }
       trimmedPin = pin.trim()

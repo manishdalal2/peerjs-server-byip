@@ -3,6 +3,12 @@ import { registerRoute, NavigationRoute } from 'workbox-routing'
 import { CacheFirst } from 'workbox-strategies'
 import { ExpirationPlugin } from 'workbox-expiration'
 import { CacheableResponsePlugin } from 'workbox-cacheable-response'
+import { clientsClaim } from 'workbox-core'
+
+// Take control of all pages immediately when a new SW version installs,
+// without waiting for tabs to close. This makes normal refreshes pick up new builds.
+self.skipWaiting()
+clientsClaim()
 
 // ── Precache (manifest injected by vite-plugin-pwa at build time) ─────────────
 precacheAndRoute(self.__WB_MANIFEST)
