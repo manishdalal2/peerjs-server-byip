@@ -332,7 +332,7 @@ export function usePeer() {
     peersStore.setStatus('Profile updated')
   }
 
-  function connectTo(peerId, alias, hasPin) {
+  function connectTo(peerId, alias, hasPin, suppliedPin = null) {
     if (peerId === peersStore.myPeerId) { peersStore.setStatus('Cannot connect to yourself!'); return }
 
     const existing = peersStore.openConversations.get(peerId)
@@ -351,14 +351,14 @@ export function usePeer() {
 
     primeAudio()
 
-    // Reuse stored PIN so we don't prompt again on reconnect
-    let trimmedPin = peerPins.get(peerId) || ''
+    // Priority: already-stored PIN > caller-supplied PIN > prompt if hasPin
+    let trimmedPin = peerPins.get(peerId) || suppliedPin || ''
     if (!trimmedPin && hasPin) {
       const pin = window.prompt(`Enter PIN for ${alias || peerId}`)
       if (pin === null) { peersStore.setStatus('Connection cancelled'); return }
       trimmedPin = pin.trim()
-      if (trimmedPin) peerPins.set(peerId, trimmedPin)
     }
+    if (trimmedPin) peerPins.set(peerId, trimmedPin)
 
     if (!existing) peersStore.openTab(peerId, alias || peerId.slice(0, 12) + '…')
     peersStore.setActiveTab(peerId)

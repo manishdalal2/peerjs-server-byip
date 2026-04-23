@@ -12,7 +12,9 @@ const { connectTo, sendProfileUpdate } = usePeer()
 
 const refreshing = ref(false)
 const manualId   = ref('')
+const manualPin  = ref('')
 const showPin    = ref(false)
+const showManualPin = ref(false)
 
 const peers = computed(() => Array.from(peersStore.availPeers.values()))
 
@@ -28,12 +30,16 @@ function handlePeerClick(p) {
 }
 
 function connectManual() {
-  const id = manualId.value.trim()
-  if (id) {
-    connectTo(id, null, false)
-    manualId.value = ''
-    emit('peer-selected')
-  }
+  const id  = manualId.value.trim()
+  const pin = manualPin.value.trim()
+  if (!id) return
+  // If peer is on same network, use their known hasPin; otherwise treat PIN field as the source of truth
+  const peer   = peersStore.availPeers.get(id)
+  const hasPin = peer ? peer.hasPin : !!pin
+  connectTo(id, peer?.displayName || peer?.alias || null, hasPin, pin || null)
+  manualId.value  = ''
+  manualPin.value = ''
+  emit('peer-selected')
 }
 </script>
 
@@ -127,7 +133,7 @@ function connectManual() {
     <!-- ── Manual connect ── -->
     <div class="p-3 border-t border-slate-200 flex-shrink-0">
       <div class="text-[10px] font-bold text-slate-400 uppercase tracking-widest mb-2">Connect by ID</div>
-      <div class="flex gap-1.5">
+      <div class="flex gap-1.5 mb-1.5">
         <input
           v-model="manualId"
           placeholder="Paste peer ID…"
@@ -140,6 +146,22 @@ function connectManual() {
           class="text-xs px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 active:bg-indigo-700
                  text-white font-bold rounded-lg transition flex-shrink-0"
         >Go</button>
+      </div>
+      <!-- Optional PIN for cross-network / PIN-protected peers -->
+      <div class="flex min-w-0 border border-slate-200 rounded-lg overflow-hidden
+                  focus-within:border-indigo-400 focus-within:ring-1 focus-within:ring-indigo-100 transition">
+        <input
+          v-model="manualPin"
+          :type="showManualPin ? 'text' : 'password'"
+          placeholder="PIN (if required)"
+          @keydown.enter="connectManual"
+          class="flex-1 min-w-0 text-xs px-2.5 py-1.5 outline-none bg-transparent"
+        />
+        <button
+          type="button"
+          @click="showManualPin = !showManualPin"
+          class="px-2 text-[10px] text-slate-400 hover:text-indigo-500 transition flex-shrink-0 border-l border-slate-200 bg-slate-50"
+        >{{ showManualPin ? 'Hide' : 'Show' }}</button>
       </div>
     </div>
 
