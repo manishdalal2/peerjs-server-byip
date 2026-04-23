@@ -11,7 +11,8 @@
   "dependencies": {
     "peerjs": "^1.5.2",
     "pinia": "^2.2.6",
-    "vue": "^3.5.13"
+    "vue": "^3.5.13",
+    "zxcvbn": "^4.4.2"
   },
   "devDependencies": {
     "@vite-pwa/assets-generator": "^1.0.2",

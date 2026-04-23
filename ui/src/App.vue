@@ -28,7 +28,7 @@ const totalUnread = computed(() =>
 const welcomeModal = ref(null)
 const sidebarOpen  = ref(false)
 const isPortrait   = ref(window.matchMedia('(orientation: portrait)').matches)
-const stunActive   = ref(!!localStorage.getItem('stun'))
+const stunActive   = ref(localStorage.getItem('stunactive') === 'true')
 
 let orientationMq      = null
 let orientationHandler = null

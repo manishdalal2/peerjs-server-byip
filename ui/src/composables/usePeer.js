@@ -1,4 +1,5 @@
-import Peer from 'peerjs'
+import Peer   from 'peerjs'
+import zxcvbn from 'zxcvbn'
 import { usePeersStore }    from '../stores/peers.js'
 import { useMessagesStore } from '../stores/messages.js'
 import { useCallStore }     from '../stores/call.js'
@@ -16,6 +17,7 @@ let screenPeerId     = null   // peer currently screen-sharing with
 const connections = new Map()  // Map<peerId, DataConnection>
 const peerPins    = new Map()  // Map<peerId, string> — PIN used to reach that peer
 
+const STUN_URL        = 'stun:stun.l.google.com:19302'
 const CHUNK_SIZE      = 16 * 1024
 const BUF_HIGH        = 1 * 1024 * 1024
 const BUF_LOW         = 256 * 1024
@@ -358,19 +360,26 @@ export function usePeer() {
     // Priority: already-stored PIN > caller-supplied PIN > prompt if hasPin
     let trimmedPin = peerPins.get(peerId) || suppliedPin || ''
     const isExternal = !peersStore.availPeers.has(peerId)
-    const stunEnabled = !!localStorage.getItem('stun')
+    const stunEnabled = localStorage.getItem('stunactive') === 'true'
 
-    // External connections via STUN require the local user to have a PIN configured.
-    // This prevents anyone from using STUN to reach external peers without securing their own endpoint.
-    if (stunEnabled && isExternal && !peersStore.pin) {
-      peersStore.setStatus('Set a PIN in your profile before connecting to external peers')
-      return
+    if (stunEnabled && isExternal) {
+      // Local user must have a PIN configured before making external connections
+      if (!peersStore.pin) {
+        peersStore.setStatus('Set a PIN in your profile before connecting to external peers')
+        return
+      }
+      // Local PIN must be complex enough
+      if (zxcvbn(peersStore.pin).score < 2) {
+        peersStore.setStatus('Your PIN is too weak — update it in your profile before connecting externally')
+        return
+      }
     }
 
     // PIN is mandatory for cross-network connections (STUN active + peer not on local network)
     if (stunEnabled && isExternal && !trimmedPin) {
       const pin = window.prompt(`PIN is required for external connections.\nEnter PIN for ${alias || peerId}:`)
       if (!pin?.trim()) { peersStore.setStatus('PIN required for external network connections'); return }
+      if (zxcvbn(pin.trim()).score < 2) { peersStore.setStatus('PIN too weak — ask the peer to set a stronger PIN'); return }
       trimmedPin = pin.trim()
     } else if (!trimmedPin && hasPin) {
       const pin = window.prompt(`Enter PIN for ${alias || peerId}`)
@@ -441,8 +450,7 @@ export function usePeer() {
       localStorage.setItem(PEER_ID_KEY, savedId)
     }
 
-    const stunUrl    = localStorage.getItem('stun')
-    const iceServers = stunUrl ? [{ urls: stunUrl }] : []
+    const iceServers = localStorage.getItem('stunactive') === 'true' ? [{ urls: STUN_URL }] : []
 
     peerInstance = new Peer(savedId, {
       host, port, path: '/', key: 'peerjs',
