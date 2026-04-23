@@ -1,3 +1,11 @@
+# [1.11.0](https://github.com/manishdalal2/peerjs-server-byip/compare/v1.10.0...v1.11.0) (2026-04-23)
+
+
+### Features
+
+* add dynamic ICE server configuration using STUN URL from localStorage ([6c47f90](https://github.com/manishdalal2/peerjs-server-byip/commit/6c47f90709a26c17d9c12b49518cb3a3ec770f8f))
+* enhance manual connection with optional PIN support and update connection logic ([89fd277](https://github.com/manishdalal2/peerjs-server-byip/commit/89fd277ba7b7436f66f424d320e4bc600dae179d))
+
 # [1.10.0](https://github.com/manishdalal2/peerjs-server-byip/compare/v1.9.0...v1.10.0) (2026-04-21)
 
 
