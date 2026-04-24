@@ -1,5 +1,6 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted } from 'vue'
+import zxcvbn from 'zxcvbn'
 import AppHeader        from './components/AppHeader.vue'
 import PeerList         from './components/PeerList.vue'
 import ChatPanel        from './components/ChatPanel.vue'
@@ -28,7 +29,10 @@ const totalUnread = computed(() =>
 const welcomeModal = ref(null)
 const sidebarOpen  = ref(false)
 const isPortrait   = ref(window.matchMedia('(orientation: portrait)').matches)
-const stunActive   = ref(localStorage.getItem('stunactive') === 'true')
+const stunActive   = computed(() =>
+  localStorage.getItem('stunactive') === 'true' &&
+  !!peersStore.pin && zxcvbn(peersStore.pin).score >= 2
+)
 
 let orientationMq      = null
 let orientationHandler = null
