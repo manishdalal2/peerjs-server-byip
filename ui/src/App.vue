@@ -10,6 +10,7 @@ import IncomingCall     from './components/IncomingCall.vue'
 import ScreenShare      from './components/ScreenShare.vue'
 import ShareTargetModal from './components/ShareTargetModal.vue'
 import ZorynAd          from './components/ZorynAd.vue'
+import PinModal         from './components/PinModal.vue'
 import { useShareTarget } from './composables/useShareTarget.js'
 import { usePeersStore }    from './stores/peers.js'
 import { useMessagesStore } from './stores/messages.js'
@@ -134,5 +135,6 @@ onUnmounted(() => {
   <ScreenShare />
   <ShareTargetModal v-if="sharedFiles.length > 0" :files="sharedFiles" @close="clearSharedFiles" />
   <ZorynAd />
+  <PinModal />
 
 </template>

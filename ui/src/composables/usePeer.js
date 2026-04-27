@@ -4,6 +4,7 @@ import { usePeersStore }    from '../stores/peers.js'
 import { useMessagesStore } from '../stores/messages.js'
 import { useCallStore }     from '../stores/call.js'
 import { useAudio }         from './useAudio.js'
+import { usePinPrompt }     from './usePinPrompt.js'
 
 // ── Module-level singletons ───────────────────────────────────────────────────
 let peerInstance     = null
@@ -28,6 +29,7 @@ export function usePeer() {
   const msgsStore  = useMessagesStore()
   const callStore  = useCallStore()
   const { primeAudio, playNotification, startRingtone, startCallerTone, stopAllCallAudio } = useAudio()
+  const { promptForPin } = usePinPrompt()
 
   // ── Helpers ───────────────────────────────────────────────────────────────
   function _connFor(peerId) { return connections.get(peerId) }
@@ -40,15 +42,15 @@ export function usePeer() {
 
   // Returns the PIN needed to reach peerId, prompting if not yet stored.
   // Every WebRTC OFFER (call + screen share) must include the destination's PIN.
-  function _getPinFor(peerId) {
+  async function _getPinFor(peerId) {
     if (peerPins.has(peerId)) return peerPins.get(peerId)
     const peer = peersStore.availPeers.get(peerId)
     if (peer?.hasPin) {
-      const label = peersStore.openConversations.get(peerId)?.label || peerId
-      const pin = window.prompt(`Enter PIN to call ${label}`)
+      const peerLabel = peersStore.openConversations.get(peerId)?.label || peerId
+      const pin = await promptForPin(`Enter PIN to call ${peerLabel}`)
       if (pin === null) return null   // user cancelled
-      peerPins.set(peerId, pin.trim())
-      return pin.trim()
+      peerPins.set(peerId, pin)
+      return pin
     }
     return null
   }
@@ -323,7 +325,17 @@ export function usePeer() {
     if (!peerInstance?.socket?._socket) { setTimeout(listenForIPGroupEvents, 400); return }
     const ws = peerInstance.socket._socket, orig = ws.onmessage
     ws.onmessage = function (evt) {
-      try { peersStore.handleIPGroupMessage(JSON.parse(evt.data)) } catch {}
+      try {
+        const data = JSON.parse(evt.data)
+        // Intercept PIN rejection before PeerJS sees it — a raw ERROR message causes PeerJS
+        // to call _abort() which destroys the peer and triggers a full reconnect/new identity.
+        if (data.type === 'ERROR' && data.payload?.msg === 'Invalid PIN provided for peer connection') {
+          peersStore.setStatus('Connection rejected — invalid PIN')
+          if (callStore.callState !== 'idle') _cleanupCall('Call failed — invalid PIN')
+          return
+        }
+        peersStore.handleIPGroupMessage(data)
+      } catch {}
       if (orig) orig.call(this, evt)
     }
   }
@@ -338,7 +350,7 @@ export function usePeer() {
     peersStore.setStatus('Profile updated')
   }
 
-  function connectTo(peerId, alias, hasPin, suppliedPin = null) {
+  async function connectTo(peerId, alias, hasPin, suppliedPin = null) {
     if (peerId === peersStore.myPeerId) { peersStore.setStatus('Cannot connect to yourself!'); return }
 
     const existing = peersStore.openConversations.get(peerId)
@@ -364,23 +376,26 @@ export function usePeer() {
 
     // PIN is mandatory for cross-network connections (STUN active + peer not on local network)
     if (stunEnabled && isExternal && !trimmedPin) {
-      const pin = window.prompt(`PIN is required for external connections.\nEnter PIN for ${alias || peerId}:`)
-      if (!pin?.trim()) { peersStore.setStatus('PIN required for external network connections'); return }
-      trimmedPin = pin.trim()
+      const pin = await promptForPin(`PIN required for external connection to ${alias || peerId}`)
+      if (!pin) { peersStore.setStatus('PIN required for external network connections'); return }
+      trimmedPin = pin
     } else if (!trimmedPin && hasPin) {
-      const pin = window.prompt(`Enter PIN for ${alias || peerId}`)
+      const pin = await promptForPin(`Enter PIN for ${alias || peerId}`)
       if (pin === null) { peersStore.setStatus('Connection cancelled'); return }
-      trimmedPin = pin.trim()
+      trimmedPin = pin
     }
     if (trimmedPin) peerPins.set(peerId, trimmedPin)
 
     if (!existing) peersStore.openTab(peerId, alias || peerId.slice(0, 12) + '…')
     peersStore.setActiveTab(peerId)
     peersStore.setStatus(`Connecting to ${alias || peerId}…`)
+    const meta = {}
+    if (trimmedPin) meta.pin = trimmedPin
+    if (peersStore.pin) meta.callerPin = peersStore.pin
     wireConn(peerInstance.connect(peerId, {
       reliable: true,
       serialization: 'raw',
-      metadata: trimmedPin ? { pin: trimmedPin } : undefined,
+      metadata: Object.keys(meta).length ? meta : undefined,
     }))
   }
 
@@ -461,6 +476,7 @@ export function usePeer() {
       const p     = peersStore.availPeers.get(c.peer)
       const label = p?.displayName || p?.alias || c.peer.slice(0, 12) + '…'
       peersStore.openTab(c.peer, label)
+      if (c.metadata?.callerPin) peerPins.set(c.peer, c.metadata.callerPin)
       wireConn(c)
       peersStore.setStatus(`Incoming connection from ${label}`)
     })
