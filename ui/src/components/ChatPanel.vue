@@ -85,6 +85,16 @@ const supportsScreenShare = !!navigator.mediaDevices?.getDisplayMedia
 const canScreen    = computed(() => supportsScreenShare && isConnected.value && !callStore.isSharingScreen && !callStore.isViewingScreen)
 const isSharingNow = computed(() => callStore.isSharingScreen)
 
+// True when a screen share is active but the overlay has been hidden (PIP or dismissed)
+const screenShareActive  = computed(() => callStore.isSharingScreen || !!callStore.remoteScreenStream)
+const overlayVisible     = computed(() => (callStore.isSharingScreen || callStore.isViewingScreen) && !callStore.screenOverlayHidden)
+const showScreenIndicator = computed(() => screenShareActive.value && !overlayVisible.value)
+
+function reopenScreenOverlay() {
+  callStore.screenOverlayHidden = false
+  if (callStore.remoteScreenStream) callStore.isViewingScreen = true
+}
+
 function switchTab(peerId) {
   peersStore.setActiveTab(peerId)
   msgsStore.markRead(peerId)
@@ -203,6 +213,26 @@ async function send() {
         {{ isConnected ? 'Connected to:' : 'Disconnected:' }}
       </span>
       <span class="font-semibold text-sm truncate flex-1">{{ activeTab.label }}</span>
+
+      <!-- Screen share active indicator — shown when overlay is hidden (PIP or dismissed) -->
+      <Transition
+        enter-active-class="transition-all duration-200"
+        enter-from-class="opacity-0 scale-75"
+        enter-to-class="opacity-100 scale-100"
+        leave-active-class="transition-all duration-150"
+        leave-to-class="opacity-0 scale-75"
+      >
+        <button
+          v-if="showScreenIndicator"
+          @click="reopenScreenOverlay"
+          title="Screen share active — tap to view"
+          class="flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold
+                 bg-red-100 text-red-600 hover:bg-red-200 transition-colors flex-shrink-0"
+        >
+          <span class="w-1.5 h-1.5 rounded-full bg-red-500 animate-pulse flex-shrink-0"></span>
+          <span class="hidden sm:inline">View screen</span>
+        </button>
+      </Transition>
 
       <!-- Call button -->
       <Transition

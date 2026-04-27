@@ -111,8 +111,8 @@ export function usePeer() {
     if (!conn?.open) { peersStore.setStatus('Connect to a peer before calling'); return }
     if (callStore.callState !== 'idle') return
 
-    // Ensure we have the PIN before acquiring mic (prompt is synchronous, mic is async)
-    const pin = _getPinFor(peerId)
+    // Ensure we have the PIN before acquiring mic
+    const pin = await _getPinFor(peerId)
     if (pin === null && peersStore.availPeers.get(peerId)?.hasPin) {
       peersStore.setStatus('PIN required to call this peer'); return
     }
@@ -198,7 +198,7 @@ export function usePeer() {
     if (!conn?.open) { peersStore.setStatus('Connect to a peer before sharing'); return }
     if (callStore.isSharingScreen) return
     // Ensure we have the PIN before starting screen capture
-    const pin = _getPinFor(peerId)
+    const pin = await _getPinFor(peerId)
     if (pin === null && peersStore.availPeers.get(peerId)?.hasPin) {
       peersStore.setStatus('PIN required to share screen with this peer'); return
     }
@@ -232,6 +232,7 @@ export function usePeer() {
   }
 
   function _cleanupScreenShare(msg = 'Screen share ended') {
+    if (document.pictureInPictureElement) document.exitPictureInPicture().catch(() => {})
     screenMediaConn?.close(); screenMediaConn = null
     callStore.resetScreen()
     screenPeerId = null

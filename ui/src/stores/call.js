@@ -38,17 +38,19 @@ export const useCallStore = defineStore('call', () => {
   }
 
   // ── Screen share ──────────────────────────────────────────────────────────
-  const screenStream       = ref(null)    // our getDisplayMedia stream (sharer side)
-  const remoteScreenStream = ref(null)    // remote peer's screen stream (viewer side)
-  const isSharingScreen    = ref(false)
-  const isViewingScreen    = ref(false)
+  const screenStream        = ref(null)    // our getDisplayMedia stream (sharer side)
+  const remoteScreenStream  = ref(null)    // remote peer's screen stream (viewer side)
+  const isSharingScreen     = ref(false)
+  const isViewingScreen     = ref(false)
+  const screenOverlayHidden = ref(false)   // true while the overlay is dismissed (e.g. PIP active)
 
   function resetScreen() {
     screenStream.value?.getTracks().forEach(t => t.stop())
-    screenStream.value       = null
-    remoteScreenStream.value = null
-    isSharingScreen.value    = false
-    isViewingScreen.value    = false
+    screenStream.value        = null
+    remoteScreenStream.value  = null
+    isSharingScreen.value     = false
+    isViewingScreen.value     = false
+    screenOverlayHidden.value = false
   }
 
   return {
@@ -58,6 +60,6 @@ export const useCallStore = defineStore('call', () => {
     startTimer, stopTimer, reset,
     // screen share
     screenStream, remoteScreenStream, isSharingScreen, isViewingScreen,
-    resetScreen,
+    screenOverlayHidden, resetScreen,
   }
 })

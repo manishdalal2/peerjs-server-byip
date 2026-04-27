@@ -8,14 +8,23 @@ const callStore  = useCallStore()
 const peersStore = usePeersStore()
 const { stopScreenShare } = usePeer()
 
-const sharerVideoEl = ref(null)   // sharer's own preview
-const viewerVideoEl = ref(null)   // viewer's received stream
+const sharerVideoEl = ref(null)
+const viewerVideoEl = ref(null)
 
-const visible = computed(() => callStore.isSharingScreen || callStore.isViewingScreen)
+const pipSupported = typeof document !== 'undefined' && !!document.pictureInPictureEnabled
 
-// Attach sharer's own screen stream.
-// flush:'post' ensures the watch runs after the DOM has updated (v-if mounted),
-// because Vue batches screenStream + isSharingScreen assignments together.
+// Overlay is visible when a share is active AND it hasn't been hidden (e.g. PIP)
+const visible = computed(() =>
+  (callStore.isSharingScreen || callStore.isViewingScreen) && !callStore.screenOverlayHidden
+)
+
+const label = computed(() =>
+  callStore.isSharingScreen
+    ? 'You are sharing your screen'
+    : `${peersStore.connectedLabel || 'Peer'} is sharing their screen`
+)
+
+// ── Stream attachment ─────────────────────────────────────────────────────
 watch(() => callStore.screenStream, stream => {
   if (sharerVideoEl.value && stream) {
     sharerVideoEl.value.srcObject = stream
@@ -23,7 +32,6 @@ watch(() => callStore.screenStream, stream => {
   }
 }, { flush: 'post' })
 
-// Attach remote screen stream when it arrives (viewer side)
 watch(() => callStore.remoteScreenStream, stream => {
   if (viewerVideoEl.value && stream) {
     viewerVideoEl.value.srcObject = stream
@@ -31,8 +39,7 @@ watch(() => callStore.remoteScreenStream, stream => {
   }
 }, { flush: 'post' })
 
-// Safety net: if the overlay becomes visible and a stream is already set
-// (e.g. viewer reopens the overlay after hiding it), re-attach.
+// Re-attach when overlay becomes visible again (e.g. returning from PIP)
 watch(visible, async v => {
   if (!v) return
   await nextTick()
@@ -46,11 +53,28 @@ watch(visible, async v => {
   }
 })
 
-const label = computed(() =>
-  callStore.isSharingScreen
-    ? 'You are sharing your screen'
-    : `${peersStore.connectedLabel || 'Peer'} is sharing their screen`
-)
+// ── Picture-in-Picture ────────────────────────────────────────────────────
+// Hold a reference to the video element that entered PIP so the leavepictureinpicture
+// listener still fires after the element is detached from the DOM.
+let _pipEl = null
+
+function handleLeavePip() {
+  callStore.screenOverlayHidden = false
+  _pipEl = null
+}
+
+async function enterPip() {
+  const el = callStore.isSharingScreen ? sharerVideoEl.value : viewerVideoEl.value
+  if (!el) return
+  try {
+    _pipEl = el
+    await el.requestPictureInPicture()
+    el.addEventListener('leavepictureinpicture', handleLeavePip, { once: true })
+    callStore.screenOverlayHidden = true
+  } catch {
+    _pipEl = null
+  }
+}
 </script>
 
 <template>
@@ -69,7 +93,6 @@ const label = computed(() =>
       >
         <!-- Toolbar -->
         <div class="flex items-center gap-3 px-4 py-3 bg-black/60 backdrop-blur-sm flex-shrink-0">
-          <!-- LIVE badge -->
           <span class="flex items-center gap-1.5 bg-red-600 text-white text-xs font-bold px-2 py-0.5 rounded">
             <span class="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
             LIVE
@@ -77,7 +100,20 @@ const label = computed(() =>
 
           <span class="text-white text-sm flex-1 truncate">{{ label }}</span>
 
-          <!-- Stop / Close button -->
+          <!-- PIP button -->
+          <button
+            v-if="pipSupported"
+            @click="enterPip"
+            title="Pop out to picture-in-picture"
+            class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white
+                   flex items-center justify-center transition-colors flex-shrink-0"
+          >
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
+              <path d="M19 7h-8v6h8V7zm2-4H3c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h18c1.1 0 1.99-.9 1.99-2L23 5c0-1.1-.9-2-2-2zm0 16H3V5h18v14z"/>
+            </svg>
+          </button>
+
+          <!-- Stop sharing (sharer only) -->
           <button
             v-if="callStore.isSharingScreen"
             @click="stopScreenShare"
@@ -85,7 +121,7 @@ const label = computed(() =>
                    text-white text-sm font-semibold rounded-lg transition-colors flex-shrink-0"
           >Stop sharing</button>
 
-          <!-- Viewer just dismisses the overlay (stream keeps going until sharer stops) -->
+          <!-- Dismiss overlay (viewer only) — stream stays active -->
           <button
             v-else
             @click="callStore.isViewingScreen = false"
@@ -93,7 +129,6 @@ const label = computed(() =>
             class="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 text-white
                    flex items-center justify-center transition-colors flex-shrink-0"
           >
-            <!-- X icon -->
             <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
               <path d="M18 6L6 18M6 6l12 12"/>
             </svg>
@@ -102,7 +137,6 @@ const label = computed(() =>
 
         <!-- Video area -->
         <div class="flex-1 flex items-center justify-center overflow-hidden p-2 sm:p-4">
-          <!-- Sharer preview -->
           <video
             v-if="callStore.isSharingScreen"
             ref="sharerVideoEl"
@@ -112,7 +146,6 @@ const label = computed(() =>
             class="max-w-full max-h-full rounded-xl shadow-2xl object-contain"
           ></video>
 
-          <!-- Viewer display -->
           <video
             v-else-if="callStore.isViewingScreen"
             ref="viewerVideoEl"
