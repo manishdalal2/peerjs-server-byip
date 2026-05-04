@@ -3,12 +3,14 @@ import { ref, computed, nextTick, watch } from 'vue'
 import { usePeersStore }    from '../stores/peers.js'
 import { useMessagesStore } from '../stores/messages.js'
 import { useCallStore }     from '../stores/call.js'
+import { useFriendsStore }  from '../stores/friends.js'
 import { usePeer }          from '../composables/usePeer.js'
 import { fmtBytes }         from '../stores/messages.js'
 
-const peersStore = usePeersStore()
-const msgsStore  = useMessagesStore()
-const callStore  = useCallStore()
+const peersStore   = usePeersStore()
+const msgsStore    = useMessagesStore()
+const callStore    = useCallStore()
+const friendsStore = useFriendsStore()
 const { sendText, sendFile, startCall, startScreenShare, stopScreenShare, closeConversation } = usePeer()
 
 const msgInput   = ref('')
@@ -102,6 +104,25 @@ function switchTab(peerId) {
 }
 
 function closeTab(peerId) { closeConversation(peerId) }
+
+// ── Add to friends ────────────────────────────────────────────────────────────
+const isAlreadyFriend = computed(() => {
+  const peerId = peersStore.activeTabId
+  if (!peerId) return false
+  return friendsStore.friends.some(f => f.peerId === peerId)
+})
+
+const canAddAsFriend = computed(() => {
+  if (!activeTab.value || isAlreadyFriend.value) return false
+  // Only allow if the label is a real name, not the truncated GUID fallback
+  const { peerId, label } = activeTab.value
+  return label !== peerId.slice(0, 12) + '…'
+})
+
+function addAsFriend() {
+  const { peerId, label } = activeTab.value
+  friendsStore.add(label, peerId, '')
+}
 
 const confirmingClear = ref(false)
 function clearHistory() {
@@ -222,6 +243,18 @@ async function send() {
         {{ isConnected ? 'Connected to:' : 'Disconnected:' }}
       </span>
       <span class="font-semibold text-sm truncate flex-1">{{ activeTab.label }}</span>
+
+      <!-- Add to friends button -->
+      <button
+        v-if="isAlreadyFriend || canAddAsFriend"
+        @click="addAsFriend"
+        :disabled="isAlreadyFriend"
+        :title="isAlreadyFriend ? 'Already in your friends list' : 'Add to friends'"
+        class="flex-shrink-0 text-[11px] px-2 py-1 rounded-md border transition font-bold"
+        :class="isAlreadyFriend
+          ? 'border-emerald-200 text-emerald-500 bg-emerald-50 cursor-default'
+          : 'border-slate-200 text-slate-400 hover:text-indigo-500 hover:border-indigo-300 hover:bg-indigo-50'"
+      >{{ isAlreadyFriend ? '★' : '☆' }}</button>
 
       <!-- Clear history button -->
       <button
