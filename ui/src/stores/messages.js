@@ -27,6 +27,72 @@ export function fmtBytes(bytes) {
 let _id = 0
 const uid = () => ++_id
 
+// ── IndexedDB ─────────────────────────────────────────────────────────────────
+const IDB_NAME    = 'shareByAirChat'
+const IDB_VERSION = 1
+const IDB_STORE   = 'messages'
+const MAX_STORED  = 500   // messages kept per peer
+
+let _db = null
+
+function _openDB() {
+  if (_db) return Promise.resolve(_db)
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(IDB_NAME, IDB_VERSION)
+    req.onupgradeneeded = e => {
+      const d = e.target.result
+      if (!d.objectStoreNames.contains(IDB_STORE)) {
+        const s = d.createObjectStore(IDB_STORE, { keyPath: 'dbKey', autoIncrement: true })
+        s.createIndex('byPeer', 'peerId', { unique: false })
+      }
+    }
+    req.onsuccess = e => { _db = e.target.result; resolve(_db) }
+    req.onerror   = e => reject(e.target.error)
+  })
+}
+
+function _persist(peerId, msg) {
+  if (msg.type === 'text') {
+    _openDB().then(db => {
+      const tx = db.transaction(IDB_STORE, 'readwrite')
+      tx.objectStore(IDB_STORE).add({
+        peerId,
+        type: 'text', local: msg.local, text: msg.text, time: msg.time, ts: Date.now(),
+      })
+      _pruneAsync(db, peerId)
+    }).catch(() => {})
+  } else if (msg.type === 'file' && msg.done) {
+    _openDB().then(db => {
+      const tx = db.transaction(IDB_STORE, 'readwrite')
+      tx.objectStore(IDB_STORE).add({
+        peerId,
+        type: 'file', local: msg.local,
+        name: msg.name, size: msg.size,
+        emoji: msg.emoji, sizeLabel: msg.sizeLabel,
+        doneLabel: msg.local ? '✓ Sent' : '✓ Received (file no longer available)',
+        done: true, progress: 100, time: msg.time, ts: Date.now(),
+      })
+      _pruneAsync(db, peerId)
+    }).catch(() => {})
+  }
+}
+
+function _pruneAsync(db, peerId) {
+  try {
+    const tx    = db.transaction(IDB_STORE, 'readwrite')
+    const index = tx.objectStore(IDB_STORE).index('byPeer')
+    const req   = index.getAllKeys(peerId)
+    req.onsuccess = () => {
+      const keys = req.result
+      if (keys.length > MAX_STORED) {
+        const store = tx.objectStore(IDB_STORE)
+        keys.slice(0, keys.length - MAX_STORED).forEach(k => store.delete(k))
+      }
+    }
+  } catch {}
+}
+
+// ── Store ─────────────────────────────────────────────────────────────────────
 export const useMessagesStore = defineStore('messages', () => {
   // Map<peerId, Message[]>
   const conversations = ref(new Map())
@@ -34,6 +100,8 @@ export const useMessagesStore = defineStore('messages', () => {
   const unread = ref(new Map())
   // Per-peer in-progress file receive state (not reactive — just tracking)
   const _recvStates = new Map()
+  // Peers whose history has already been loaded this session
+  const _historyLoaded = new Set()
 
   // ── Settings ──────────────────────────────────────────────────────────────
   const autoDownload = ref(localStorage.getItem('settingAutoDownload') !== 'false')
@@ -66,12 +134,45 @@ export const useMessagesStore = defineStore('messages', () => {
     unread.value = m
   }
 
+  // ── Load history from IndexedDB ───────────────────────────────────────────
+  async function loadConversation(peerId) {
+    if (_historyLoaded.has(peerId)) return
+    _historyLoaded.add(peerId)
+    try {
+      const db = await _openDB()
+      const records = await new Promise((resolve, reject) => {
+        const tx    = db.transaction(IDB_STORE, 'readonly')
+        const req   = tx.objectStore(IDB_STORE).index('byPeer').getAll(peerId)
+        req.onsuccess = () => resolve(req.result)
+        req.onerror   = e => reject(e.target.error)
+      })
+      if (!records.length) return
+      const msgs = records.map(({ dbKey, peerId: _pid, ts, ...rest }) => ({
+        ...rest,
+        id: uid(),
+        fromHistory: true,
+      }))
+      // Divider separates history from live messages
+      msgs.push({ id: uid(), type: 'history-divider', fromHistory: true })
+      const m = new Map(conversations.value)
+      const existing = m.get(peerId) ?? []
+      // Prepend history before any messages already buffered this session
+      m.set(peerId, [...msgs, ...existing])
+      conversations.value = m
+    } catch {}
+  }
+
+  // ── Message writers ───────────────────────────────────────────────────────
   function addLocalText(peerId, text) {
-    _push(peerId, { id: uid(), type: 'text', local: true, text, time: nowTime() })
+    const msg = { id: uid(), type: 'text', local: true, text, time: nowTime() }
+    _push(peerId, msg)
+    _persist(peerId, msg)
   }
 
   function addRemoteText(peerId, text) {
-    _push(peerId, { id: uid(), type: 'text', local: false, text, time: nowTime() })
+    const msg = { id: uid(), type: 'text', local: false, text, time: nowTime() }
+    _push(peerId, msg)
+    _persist(peerId, msg)
     _bumpUnread(peerId)
   }
 
@@ -118,7 +219,6 @@ export const useMessagesStore = defineStore('messages', () => {
       _finalize(peerId, state.msgId, '✓ Saved to Downloads')
       _autoDownload(blob, name)
     } else {
-      // Store blob URL on the message so user can save manually
       const blobUrl = URL.createObjectURL(blob)
       _finalizeWithBlob(peerId, state.msgId, blobUrl, name)
     }
@@ -131,7 +231,6 @@ export const useMessagesStore = defineStore('messages', () => {
     const m = msgs.find(m => m.id === msgId)
     if (!m?.blobUrl) return
     _autoDownload_url(m.blobUrl, m.name)
-    // revoke and clear after save
     setTimeout(() => URL.revokeObjectURL(m.blobUrl), 10_000)
     const nm = conversations.value.get(peerId)
     const idx = nm.findIndex(x => x.id === msgId)
@@ -152,14 +251,20 @@ export const useMessagesStore = defineStore('messages', () => {
     const msgs = conversations.value.get(peerId)
     if (!msgs) return
     const m = msgs.find(m => m.id === id)
-    if (m) { m.done = true; m.doneLabel = label; m.progress = 100 }
+    if (m) {
+      m.done = true; m.doneLabel = label; m.progress = 100
+      _persist(peerId, m)
+    }
   }
 
   function _finalizeWithBlob(peerId, id, blobUrl, name) {
     const msgs = conversations.value.get(peerId)
     if (!msgs) return
     const m = msgs.find(m => m.id === id)
-    if (m) { m.done = true; m.doneLabel = ''; m.progress = 100; m.blobUrl = blobUrl; m.name = name }
+    if (m) {
+      m.done = true; m.doneLabel = ''; m.progress = 100; m.blobUrl = blobUrl; m.name = name
+      _persist(peerId, m)
+    }
   }
 
   function _autoDownload(blob, name) {
@@ -177,7 +282,6 @@ export const useMessagesStore = defineStore('messages', () => {
   }
 
   function clearConversation(peerId) {
-    // Revoke any pending blob URLs to avoid memory leaks
     const msgs = conversations.value.get(peerId) ?? []
     msgs.forEach(m => { if (m.blobUrl) URL.revokeObjectURL(m.blobUrl) })
     const m = new Map(conversations.value)
@@ -187,12 +291,14 @@ export const useMessagesStore = defineStore('messages', () => {
     u.delete(peerId)
     unread.value = u
     _recvStates.delete(peerId)
+    _historyLoaded.delete(peerId)
   }
 
   return {
     conversations, unread,
     autoDownload, setAutoDownload,
     getMessages, markRead,
+    loadConversation,
     addLocalText, addRemoteText,
     addLocalFile, onFileStart, onChunk, onFileEnd,
     updateFileProgress, finalizeFile,

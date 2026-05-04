@@ -6,6 +6,7 @@ export const usePeersStore = defineStore('peers', () => {
   const serverConnected = ref(false)
   const availPeers      = ref(new Map())   // Map<id, peerObj>
   const statusText      = ref('Initialising…')
+  const connectionError = ref(null)   // shown as a prominent banner when set
   const myAlias         = ref('—')
 
   // Open conversation tabs — Map<peerId, { label, connected }>
@@ -24,6 +25,8 @@ export const usePeersStore = defineStore('peers', () => {
   })
 
   function setStatus(msg) { statusText.value = msg }
+  function setConnectionError(msg) { connectionError.value = msg }
+  function clearConnectionError() { connectionError.value = null }
 
   // ── Tab management ──────────────────────────────────────────────────────────
   function openTab(peerId, label) {
@@ -129,11 +132,11 @@ export const usePeersStore = defineStore('peers', () => {
   }
 
   return {
-    myPeerId, serverConnected, availPeers, statusText, myAlias,
+    myPeerId, serverConnected, availPeers, statusText, connectionError, myAlias,
     openConversations, activeTabId,
     displayName, pin,
     connectedId, connectedLabel,
-    setStatus,
+    setStatus, setConnectionError, clearConnectionError,
     openTab, closeTab, setTabConnected, setActiveTab,
     setPeerConnected, setPeerDisconnected,
     loadPeers, handleIPGroupMessage,

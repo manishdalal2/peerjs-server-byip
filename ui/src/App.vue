@@ -112,6 +112,19 @@ onUnmounted(() => {
       <ChatPanel />
     </div>
 
+    <!-- ID conflict error banner -->
+    <div
+      v-if="peersStore.connectionError"
+      class="bg-red-600 text-white px-4 py-2 text-xs flex-shrink-0 flex items-start gap-2"
+    >
+      <span class="mt-0.5 flex-shrink-0">&#9888;</span>
+      <span class="flex-1">{{ peersStore.connectionError }}</span>
+      <button
+        @click="peersStore.clearConnectionError()"
+        class="flex-shrink-0 text-white/70 hover:text-white font-bold text-sm leading-none"
+      >&#x2715;</button>
+    </div>
+
     <!-- Cross-network warning bar (shown when STUN is configured) -->
     <div
       v-if="stunActive"

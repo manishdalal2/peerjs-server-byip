@@ -324,6 +324,16 @@ async function send() {
 
         <template v-for="msg in activeMessages" :key="msg.id">
 
+          <!-- History divider -->
+          <div
+            v-if="msg.type === 'history-divider'"
+            class="flex items-center gap-3 my-2 select-none"
+          >
+            <div class="flex-1 h-px bg-slate-200"></div>
+            <span class="text-[10px] text-slate-400 font-medium whitespace-nowrap">Earlier messages</span>
+            <div class="flex-1 h-px bg-slate-200"></div>
+          </div>
+
           <!-- Text bubble -->
           <div
             v-if="msg.type === 'text'"

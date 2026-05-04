@@ -3,6 +3,7 @@ import zxcvbn from 'zxcvbn'
 import { usePeersStore }    from '../stores/peers.js'
 import { useMessagesStore } from '../stores/messages.js'
 import { useCallStore }     from '../stores/call.js'
+import { useFriendsStore }  from '../stores/friends.js'
 import { useAudio }         from './useAudio.js'
 import { usePinPrompt }     from './usePinPrompt.js'
 
@@ -15,8 +16,10 @@ let callTimeoutId    = null
 let callPeerId       = null   // peer currently in a call with
 let screenPeerId     = null   // peer currently screen-sharing with
 
-const connections = new Map()  // Map<peerId, DataConnection>
-const peerPins    = new Map()  // Map<peerId, string> — PIN used to reach that peer
+const connections  = new Map()  // Map<peerId, DataConnection>
+const peerPins     = new Map()  // Map<peerId, string> — PIN used to reach that peer
+let   initRetries  = 0
+const MAX_RETRIES  = 8          // ~16 s total before giving up
 
 const STUN_URL        = 'stun:stun.l.google.com:19302'
 const CHUNK_SIZE      = 16 * 1024
@@ -25,9 +28,10 @@ const BUF_LOW         = 256 * 1024
 const RING_TIMEOUT_MS = 45_000
 
 export function usePeer() {
-  const peersStore = usePeersStore()
-  const msgsStore  = useMessagesStore()
-  const callStore  = useCallStore()
+  const peersStore   = usePeersStore()
+  const msgsStore    = useMessagesStore()
+  const callStore    = useCallStore()
+  const friendsStore = useFriendsStore()
   const { primeAudio, playNotification, startRingtone, startCallerTone, stopAllCallAudio } = useAudio()
   const { promptForPin } = usePinPrompt()
 
@@ -246,6 +250,19 @@ export function usePeer() {
     c.on('open', () => {
       const p     = peersStore.availPeers.get(c.peer)
       peersStore.setPeerConnected(c.peer, p?.displayName ?? null, p?.alias ?? null)
+      // Send our name so the remote peer can label us (critical for external connections)
+      const myName = peersStore.displayName || peersStore.myAlias
+      if (myName && myName !== '—') {
+        c.send(JSON.stringify({ type: 'profile', name: myName }))
+      }
+      // Persist the PIN back to the saved friend so future connections are seamless
+      const usedPin = peerPins.get(c.peer)
+      if (usedPin) {
+        const friend = friendsStore.friends.find(f => f.peerId === c.peer)
+        if (friend && friend.pin !== usedPin) {
+          friendsStore.update(friend.id, { pin: usedPin })
+        }
+      }
       playNotification()
     })
 
@@ -257,6 +274,17 @@ export function usePeer() {
       try { msg = JSON.parse(data) } catch { return }
 
       switch (msg.type) {
+        // ── Profile exchange (especially useful for external/cross-network peers) ──
+        case 'profile':
+          if (msg.name) {
+            peersStore.setPeerConnected(peerId, msg.name, null)
+            const friend = friendsStore.friends.find(f => f.peerId === peerId)
+            if (friend && friend.name !== msg.name) {
+              friendsStore.update(friend.id, { name: msg.name })
+            }
+          }
+          break
+
         // ── Chat / file ────────────────────────────────────────────────────
         case 'chat':
           msgsStore.addRemoteText(peerId, msg.text)
@@ -336,6 +364,16 @@ export function usePeer() {
           return
         }
         peersStore.handleIPGroupMessage(data)
+        // Keep friend's name in sync when a nearby peer updates their display name
+        if (data.type === 'PEER-METADATA-UPDATED') {
+          const p = data.payload
+          if (p?.displayName && p.id) {
+            const friend = friendsStore.friends.find(f => f.peerId === p.id)
+            if (friend && friend.name !== p.displayName) {
+              friendsStore.update(friend.id, { name: p.displayName })
+            }
+          }
+        }
       } catch {}
       if (orig) orig.call(this, evt)
     }
@@ -389,6 +427,7 @@ export function usePeer() {
 
     if (!existing) peersStore.openTab(peerId, alias || peerId.slice(0, 12) + '…')
     peersStore.setActiveTab(peerId)
+    msgsStore.loadConversation(peerId)
     peersStore.setStatus(`Connecting to ${alias || peerId}…`)
     const meta = {}
     if (trimmedPin) meta.pin = trimmedPin
@@ -466,6 +505,8 @@ export function usePeer() {
     })
 
     peerInstance.on('open', id => {
+      initRetries = 0
+      peersStore.clearConnectionError()
       peersStore.myPeerId = id; peersStore.serverConnected = true
       peersStore.setStatus('Connected — discovering peers…')
       peersStore.loadPeers(); listenForIPGroupEvents()
@@ -477,6 +518,7 @@ export function usePeer() {
       const p     = peersStore.availPeers.get(c.peer)
       const label = p?.displayName || p?.alias || c.peer.slice(0, 12) + '…'
       peersStore.openTab(c.peer, label)
+      msgsStore.loadConversation(c.peer)
       if (c.metadata?.callerPin) peerPins.set(c.peer, c.metadata.callerPin)
       wireConn(c)
       peersStore.setStatus(`Incoming connection from ${label}`)
@@ -514,11 +556,20 @@ export function usePeer() {
     peerInstance.on('error', err => {
       peersStore.serverConnected = false
       if (err.type === 'unavailable-id') {
-        // Saved ID is still live on server (brief post-refresh window) — clear it and retry
-        localStorage.removeItem(PEER_ID_KEY)
-        peerInstance.destroy(); peerInstance = null
-        setTimeout(init, 1000)
-        peersStore.setStatus('ID conflict — reconnecting with new ID…')
+        // ID is still live on the server (page refresh, or another tab is open).
+        // Null peerInstance first so the 'disconnected' handler's reconnect() is a no-op.
+        const dying = peerInstance
+        peerInstance = null
+        dying.destroy()
+        if (initRetries < MAX_RETRIES) {
+          initRetries++
+          peersStore.clearConnectionError()
+          peersStore.setStatus(`Your ID is in use — retrying… (${initRetries}/${MAX_RETRIES})`)
+          setTimeout(init, 2000)
+        } else {
+          peersStore.setConnectionError('Share By Air is already open in another tab. Please close the other tab and refresh this page.')
+          peersStore.setStatus('Could not connect — ID already in use')
+        }
         return
       }
       peersStore.setStatus('Error: ' + (err.type || err))
@@ -530,6 +581,7 @@ export function usePeer() {
     connections.forEach(c => c.close())
     connections.clear()
     peerPins.clear()
+    initRetries = 0
     peerInstance?.destroy()
     peerInstance = null
   }
