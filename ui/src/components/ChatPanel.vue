@@ -103,6 +103,15 @@ function switchTab(peerId) {
 
 function closeTab(peerId) { closeConversation(peerId) }
 
+const confirmingClear = ref(false)
+function clearHistory() {
+  if (!confirmingClear.value) { confirmingClear.value = true; return }
+  msgsStore.clearConversation(peersStore.activeTabId)
+  confirmingClear.value = false
+}
+// Cancel confirm if user switches tab
+watch(() => peersStore.activeTabId, () => { confirmingClear.value = false })
+
 // Scroll to bottom + mark read when messages arrive or tab switches
 watch(() => activeMessages.value.length, async () => {
   await nextTick()
@@ -213,6 +222,16 @@ async function send() {
         {{ isConnected ? 'Connected to:' : 'Disconnected:' }}
       </span>
       <span class="font-semibold text-sm truncate flex-1">{{ activeTab.label }}</span>
+
+      <!-- Clear history button -->
+      <button
+        @click="clearHistory"
+        :title="confirmingClear ? 'Click again to confirm' : 'Clear chat history'"
+        class="flex-shrink-0 text-[10px] px-2 py-1 rounded-md border transition font-medium"
+        :class="confirmingClear
+          ? 'border-red-300 text-red-500 bg-red-50 hover:bg-red-100'
+          : 'border-slate-200 text-slate-400 hover:text-red-500 hover:border-red-300 hover:bg-red-50'"
+      >{{ confirmingClear ? 'Confirm clear' : 'Clear' }}</button>
 
       <!-- Screen share active indicator — shown when overlay is hidden (PIP or dismissed) -->
       <Transition

@@ -292,6 +292,16 @@ export const useMessagesStore = defineStore('messages', () => {
     unread.value = u
     _recvStates.delete(peerId)
     _historyLoaded.delete(peerId)
+    // Also wipe persisted history from IndexedDB
+    _openDB().then(db => {
+      const tx    = db.transaction(IDB_STORE, 'readwrite')
+      const index = tx.objectStore(IDB_STORE).index('byPeer')
+      const req   = index.getAllKeys(peerId)
+      req.onsuccess = () => {
+        const store = tx.objectStore(IDB_STORE)
+        req.result.forEach(k => store.delete(k))
+      }
+    }).catch(() => {})
   }
 
   return {
