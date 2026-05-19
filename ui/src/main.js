@@ -8,7 +8,7 @@ if (
   localStorage.getItem('stunactive') === 'true'
 ) {
   sessionStorage.setItem('stunactive', 'true')
-  localStorage.removeItem('stunactive')
+
 }
 
 const app = createApp(App)
