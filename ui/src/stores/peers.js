@@ -13,9 +13,25 @@ export const usePeersStore = defineStore('peers', () => {
   const openConversations = ref(new Map())
   const activeTabId       = ref(null)
 
+  // STUN mode — session-only, toggled via hidden 5-click on header logo
+  const stunActive = ref(sessionStorage.getItem('stunactive') === 'true')
+  function toggleStun() {
+    stunActive.value = !stunActive.value
+    sessionStorage.setItem('stunactive', stunActive.value ? 'true' : 'false')
+  }
+
   // Profile — kept in sync with localStorage
   const displayName = ref(localStorage.getItem('peerProfileName') || '')
-  const pin         = ref(localStorage.getItem('peerProfilePin')  || '')
+
+  function _generatePin() {
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ123456789'
+    let p = ''
+    for (let i = 0; i < 8; i++) p += chars[Math.floor(Math.random() * chars.length)]
+    localStorage.setItem('peerProfilePin', p)
+    return p
+  }
+  const pin = ref(localStorage.getItem('peerProfilePin') || _generatePin())
+  function regeneratePin() { pin.value = _generatePin() }
 
   // Backward-compat computed values used in CallBar and legacy code
   const connectedId    = computed(() => activeTabId.value)
@@ -135,6 +151,8 @@ export const usePeersStore = defineStore('peers', () => {
     myPeerId, serverConnected, availPeers, statusText, connectionError, myAlias,
     openConversations, activeTabId,
     displayName, pin,
+    stunActive, toggleStun,
+    regeneratePin,
     connectedId, connectedLabel,
     setStatus, setConnectionError, clearConnectionError,
     openTab, closeTab, setTabConnected, setActiveTab,

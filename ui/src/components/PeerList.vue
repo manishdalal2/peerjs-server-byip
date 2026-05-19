@@ -146,6 +146,12 @@ function connectFriend(f) {
               @click="showPin = !showPin"
               class="px-2 text-[10px] text-slate-400 hover:text-indigo-500 transition flex-shrink-0 border-l border-slate-200 bg-slate-50"
             >{{ showPin ? 'Hide' : 'Show' }}</button>
+            <button
+              type="button"
+              @click="peersStore.regeneratePin()"
+              title="Generate a new PIN"
+              class="px-2 text-[11px] text-slate-400 hover:text-amber-500 transition flex-shrink-0 border-l border-slate-200 bg-slate-50"
+            >↻</button>
           </div>
           <button
             @click="sendProfileUpdate"

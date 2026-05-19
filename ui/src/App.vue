@@ -31,7 +31,7 @@ const welcomeModal = ref(null)
 const sidebarOpen  = ref(false)
 const isPortrait   = ref(window.matchMedia('(orientation: portrait)').matches)
 const stunActive   = computed(() =>
-  localStorage.getItem('stunactive') === 'true' &&
+  peersStore.stunActive &&
   !!peersStore.pin && zxcvbn(peersStore.pin).score >= 2
 )
 

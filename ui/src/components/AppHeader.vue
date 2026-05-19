@@ -1,5 +1,5 @@
 <script setup>
-import { computed } from 'vue'
+import { ref, computed } from 'vue'
 import { usePeersStore } from '../stores/peers.js'
 
 defineProps({ sidebarOpen: Boolean, forceOverlay: Boolean, totalUnread: { type: Number, default: 0 } })
@@ -9,6 +9,23 @@ const peers = usePeersStore()
 const shortId = computed(() =>
   peers.myPeerId ? peers.myPeerId.slice(0, 8) + '…' : 'connecting…'
 )
+
+// Secret 5-click on the logo title to toggle STUN mode
+const clickCount  = ref(0)
+const stunFlash   = ref(false)
+let clickTimer    = null
+
+function onLogoClick() {
+  clickCount.value++
+  clearTimeout(clickTimer)
+  clickTimer = setTimeout(() => { clickCount.value = 0 }, 2000)
+  if (clickCount.value >= 5) {
+    clickCount.value = 0
+    peers.toggleStun()
+    stunFlash.value = true
+    setTimeout(() => { window.location.reload() }, 1500)
+  }
+}
 </script>
 
 <template>
@@ -44,9 +61,14 @@ const shortId = computed(() =>
         ></span>
       </button>
 
-      <div class="flex flex-col leading-tight">
-        <h1 class="text-sm sm:text-base font-extrabold tracking-tight whitespace-nowrap">✈️ Share by Air</h1>
-        <span class="hidden sm:block text-[10px] opacity-70 whitespace-nowrap">Your data never leaves your hands.</span>
+      <div class="flex flex-col leading-tight select-none cursor-default" @click="onLogoClick">
+        <h1
+          class="text-sm sm:text-base font-extrabold tracking-tight whitespace-nowrap transition-opacity duration-200"
+          :class="stunFlash ? 'opacity-50' : 'opacity-100'"
+        >✈️ Share by Air</h1>
+        <span class="hidden sm:block text-[10px] opacity-70 whitespace-nowrap">
+          {{ stunFlash ? (peers.stunActive ? 'STUN enabled' : 'STUN disabled') : 'Your data never leaves your hands.' }}
+        </span>
       </div>
     </div>
 

@@ -411,7 +411,7 @@ export function usePeer() {
     // Priority: already-stored PIN > caller-supplied PIN > prompt if hasPin
     let trimmedPin = peerPins.get(peerId) || suppliedPin || ''
     const isExternal = !peersStore.availPeers.has(peerId)
-    const stunEnabled = localStorage.getItem('stunactive') === 'true'
+    const stunEnabled = sessionStorage.getItem('stunactive') === 'true'
 
     // PIN is mandatory for cross-network connections (STUN active + peer not on local network)
     if (stunEnabled && isExternal && !trimmedPin) {
@@ -491,7 +491,7 @@ export function usePeer() {
       localStorage.setItem(PEER_ID_KEY, savedId)
     }
 
-    const stunWanted = localStorage.getItem('stunactive') === 'true'
+    const stunWanted = sessionStorage.getItem('stunactive') === 'true'
     const pinStrong  = !!peersStore.pin && zxcvbn(peersStore.pin).score >= 2
     const iceServers = (stunWanted && pinStrong) ? [{ urls: STUN_URL }] : []
     if (stunWanted && !pinStrong) {
